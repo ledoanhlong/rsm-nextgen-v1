@@ -5,6 +5,7 @@ import yaml
 import bcrypt
 import requests
 import streamlit as st
+import base64
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -85,9 +86,79 @@ def get_llm_response(prompt: str, context: str) -> str:
         content = data.get("output") or data.get("reply") or json.dumps(data)
     return content
 
+def inject_custom_css():
+    st.markdown("""
+        <style>
+        @font-face {
+            font-family: 'Prelo';
+            src: url('assets/fonts/Prelo-Light.woff2') format('woff2'),
+                 url('assets/fonts/Prelo-Light.woff2') format('woff2');
+            font-weight: normal;
+            font-style: normal;
+        }
+        html, body, [class*="css"]  {
+            font-family: 'Prelo', sans-serif !important;
+        }
+        .main {
+            background-color: #009CDE;
+        }
+        .rsm-logo {
+            width: 120px !important;
+            max-width: 30vw;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+        .login-card {
+            background: #009CDE;
+            padding: 2.5rem 2rem 2rem 2rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+            max-width: 350px;
+            margin: 2rem auto 0 auto;
+        }
+        .stButton>button {
+            width: 100%;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+        .chat-bubble-user {
+            background: #009CDE;
+            border-radius: 12px 12px 0 12px;
+            padding: 0.8em 1em;
+            margin-bottom: 0.5em;
+            margin-left: 30%;
+        }
+        .chat-bubble-assistant {
+            background: #3F9C35;
+            border-radius: 12px 12px 12px 0;
+            padding: 0.8em 1em;
+            margin-bottom: 0.5em;
+            margin-right: 30%;
+        }
+        .stChatInput {
+            margin-bottom: 2rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+def show_logo():
+    logo_path = ".streamlit/rsm logo.png"
+    if Path(logo_path).exists():
+        with open(logo_path, "rb") as image_file:
+            encoded = base64.b64encode(image_file.read()).decode()
+        st.markdown(
+            f'<img src="data:image/png;base64,{encoded}" width="120" style="margin-top:2rem;margin-bottom:1rem;" />',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.write("<!-- Logo not found -->")
+
 # ---------- UI: Login ----------
 def login_ui():
-    st.title("🔐 Login")
+    inject_custom_css()
+    show_logo()
+    st.markdown('<div class="login-card">', unsafe_allow_html=True)
+    st.markdown('<h2 style="text-align:center; margin-bottom:1.5rem;">🔐 Login</h2>', unsafe_allow_html=True)
 
     users = load_credentials(CONFIG_PATH)
     with st.form("login_form", clear_on_submit=False):
@@ -99,51 +170,62 @@ def login_ui():
         if verify_user(users, username, password):
             st.session_state["authenticated"] = True
             st.session_state["username"] = username
-            # Initialize chat history if first login this session
             st.session_state.setdefault("messages", [{"role": "assistant", "content": "Hi! How can I help today?"}])
             st.success("Login successful. Redirecting…")
             st.rerun()
         else:
             st.error("Invalid username or password")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------- UI: Chat ----------
 def chat_ui():
+    inject_custom_css()
     st.set_page_config(page_title="Chat", page_icon="💬", layout="wide")
-    col_left, col_right = st.columns([1, 5])
-    with col_left:
-        st.caption(f"Logged in as **{st.session_state.get('username')}**")
-    with col_right:
-        st.button("Logout", on_click=do_logout, type="secondary")
+    show_logo()
+    st.markdown(
+        f"""
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <span style="color:#888;">Logged in as <b>{st.session_state.get('username')}</b></span>
+            <form action="#" method="post" style="margin:0;">
+                <button type="submit" name="logout" style="background:#fff; color:#005596; border:1px solid #005596; border-radius:6px; padding:0.3em 1em; font-weight:600; cursor:pointer;" onclick="window.location.reload();">Logout</button>
+            </form>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown('<h2 style="margin-bottom:1.5rem;">💬 Chat</h2>', unsafe_allow_html=True)
 
-    st.title("💬 Chat")
-
-    # Ensure messages is present
     st.session_state.setdefault("messages", [])
 
-    # Display history
+    # Display history with styled bubbles
     for msg in st.session_state["messages"]:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+        bubble_class = "chat-bubble-user" if msg["role"] == "user" else "chat-bubble-assistant"
+        st.markdown(
+            f'<div class="{bubble_class}">{msg["content"]}</div>',
+            unsafe_allow_html=True,
+        )
 
-    # Input
     user_input = st.chat_input("Type your message…")
     if user_input:
         st.session_state["messages"].append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
+        st.markdown(
+            f'<div class="chat-bubble-user">{user_input}</div>',
+            unsafe_allow_html=True,
+        )
 
-        # Build a simple textual context from recent turns
         recent: List[Dict[str, str]] = st.session_state["messages"][-10:]
         context_text = "\n".join(f"{m['role']}: {m['content']}" for m in recent)
 
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking…"):
-                try:
-                    reply = get_llm_response(user_input, context_text)
-                except Exception as e:
-                    reply = f"Sorry, I hit an error calling the model: `{e}`"
+        with st.spinner("Thinking…"):
+            try:
+                reply = get_llm_response(user_input, context_text)
+            except Exception as e:
+                reply = f"Sorry, I hit an error calling the model: `{e}`"
 
-            st.markdown(reply)
+        st.markdown(
+            f'<div class="chat-bubble-assistant">{reply}</div>',
+            unsafe_allow_html=True,
+        )
         st.session_state["messages"].append({"role": "assistant", "content": reply})
 
 # ---------- App entry ----------
