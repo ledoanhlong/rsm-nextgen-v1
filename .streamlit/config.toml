@@ -1,0 +1,13 @@
+[theme]
+base = "dark"
+primaryColor = "#00E0A4"      # Brand accent
+backgroundColor = "#0E1117"   # Main background
+secondaryBackgroundColor = "#161B22"
+textColor = "#E6EDF3"
+font = "sans serif"            # (serif | sans serif | monospace)
+
+[client]
+showSidebarNavigation = true
+
+[server]
+headless = true
