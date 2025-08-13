@@ -1,13 +1,22 @@
 [theme]
 base = "dark"
-primaryColor = "#00E0A4"      # Brand accent
-backgroundColor = "#0E1117"   # Main background
-secondaryBackgroundColor = "#161B22"
-textColor = "#E6EDF3"
-font = "sans serif"            # (serif | sans serif | monospace)
+primaryColor = "#009CDE"
+backgroundColor = "#2a2a2a"
+secondaryBackgroundColor = "#888B8D"
+codeBackgroundColor = "#121212"
+textColor = "#ffffff"
+linkColor = "#3F9C35"
+borderColor = "#7c7c7c"
+showWidgetBorder = true
+baseRadius = "0.3rem"
+buttonRadius = "full"
+font = "Poppins"
+headingFontWeights = [600, 500, 500, 500, 500, 500]
+headingFontSizes = ["3rem", "2.5rem", "2.25rem", "2rem", "1.5rem"]
+chartCategoricalColors = ["#009CDE", "#3F9C35", "#888B8D"]
 
-[client]
-showSidebarNavigation = true
-
-[server]
-headless = true
+[theme.sidebar]
+backgroundColor = "#121212"
+secondaryBackgroundColor = "#000000"
+codeBackgroundColor = "#2a2a2a"
+borderColor = "#696969"
