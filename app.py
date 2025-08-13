@@ -44,10 +44,7 @@ SYSTEM_PROMPT_PREFIX = "You are a helpful assistant. Here is chat context:\n"
 st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
 
 def inject_css() -> None:
-    """
-    - Registers Prelo font from your assets folder
-    - Left/right chat alignment with colored bubbles
-    """
+    
     st.markdown(
         """
         <style>
