@@ -1,16 +1,13 @@
 # app.py
-from __future__ import annotations
-
 import os
 import json
 import base64
+import requests
+import bcrypt
+import yaml
+import streamlit as st
 from pathlib import Path
 from typing import Dict, List
-
-import bcrypt
-import requests
-import streamlit as st
-import yaml
 
 # =======================
 # ❖ Config / Constants  |
@@ -22,15 +19,11 @@ APP_LAYOUT = "centered"  # "wide" or "centered"
 CREDENTIALS_PATH = Path("credentials.yaml")
 LOGO_PATH = Path(".streamlit/rsm logo.png")
 
-import os, json, yaml, bcrypt, requests, streamlit as st
-from pathlib import Path
-from typing import Dict, Any, List
-
-# ---------- Settings ----------
-CONFIG_PATH = Path("credentials.yaml")
+# ---------- Secrets / API ----------
 LLM_API_KEY = os.getenv("AZURE_API_KEY", "")
 LLM_ENDPOINT = os.getenv("AZURE_API_ENDPOINT", "")
 
+# ---------- Session Keys ----------
 SK_AUTH = "authenticated"
 SK_USER = "username"
 SK_MSGS = "messages"
@@ -44,11 +37,10 @@ SYSTEM_PROMPT_PREFIX = "You are a helpful assistant. Here is chat context:\n"
 st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
 
 def inject_css() -> None:
-    
     st.markdown(
         """
         <style>
-            /* Register Prelo (adjust paths if your filenames differ) */
+            /* Fonts */
             @font-face {
                 font-family: 'Prelo';
                 src: url('assets/fonts/Prelo-Light.woff2') format('woff2'),
@@ -67,8 +59,8 @@ def inject_css() -> None:
             }
 
             :root {
-                --brand-primary: #009CDE;  /* Assistant bubbles */
-                --brand-user:    #3F9C35;  /* User bubbles */
+                --brand-primary: #009CDE;
+                --brand-user:    #3F9C35;
                 --text-muted:    #6b7280;
                 --card-bg:       #ffffff;
                 --app-bg:        #f7fafc;
@@ -97,7 +89,7 @@ def inject_css() -> None:
             /* Logo */
             .brand-logo {
                 display: block;
-                margin: 2rem auto 0.75rem auto;
+                margin: 1rem auto 0.5rem auto;
                 width: 120px;
                 max-width: 45vw;
             }
@@ -109,10 +101,7 @@ def inject_css() -> None:
                 gap: 0.5rem;
                 margin-top: 0.75rem;
             }
-            .msg-row {
-                display: flex;
-                width: 100%;
-            }
+            .msg-row { display: flex; width: 100%; }
             .msg-row.assistant { justify-content: flex-start; }
             .msg-row.user      { justify-content: flex-end; }
 
@@ -127,17 +116,21 @@ def inject_css() -> None:
                 white-space: pre-wrap;
                 font-weight: 400;
             }
-            .assistant .msg-bubble {
-                background: var(--brand-primary);
-                border-top-left-radius: 6px;
-            }
-            .user .msg-bubble {
-                background: var(--brand-user);
-                border-top-right-radius: 6px;
-            }
+            .assistant .msg-bubble { background: var(--brand-primary); border-top-left-radius: 6px; }
+            .user .msg-bubble      { background: var(--brand-user);    border-top-right-radius: 6px; }
 
             /* Hide hamburger on login for cleaner look */
             [data-testid="collapsedControl"] { display: none; }
+
+            /* ===== Sidebar ordering ===== */
+            [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+                display: flex;
+                flex-direction: column;
+            }
+            .branding-top { order: 0; }
+            [data-testid="stSidebarNav"] { order: 1; margin-top: 0.5rem; }
+            .sidebar-rest { order: 2; }
+
         </style>
         """,
         unsafe_allow_html=True,
@@ -164,13 +157,6 @@ def show_logo(center: bool = True) -> None:
 # ❖ Credentials / Auth     |
 # ==========================
 def load_credentials(path: Path) -> Dict[str, Dict[str, str]]:
-    """
-    credentials:
-      users:
-        Alice:
-          name: "Alice"
-          password: "$2b$12$...bcrypt-hash..."
-    """
     if not path.exists():
         return {}
     try:
@@ -191,19 +177,21 @@ def verify_user(users: Dict[str, Dict[str, str]], username: str, password: str) 
     except ValueError:
         return False
 
-def do_logout():
-    # ✅ No st.rerun() here. Just mutate state; the button click will rerun automatically.
-    st.session_state["authenticated"] = False
-    st.session_state["username"] = ""
-    st.session_state["messages"] = []
-    # st.session_state.clear()       # wipe everything
-    # st.stop()                      # stop execution right here
-
-
 def logout() -> None:
     for k in (SK_AUTH, SK_USER, SK_MSGS):
         if k in st.session_state:
             del st.session_state[k]
+    st.rerun()
+
+# ---------- Conversation helpers ----------
+def clear_conversation():
+    """Clears all messages (no greeting)."""
+    st.session_state[SK_MSGS] = []
+    st.rerun()
+
+def new_chat():
+    """Starts a brand-new chat with the default assistant greeting."""
+    st.session_state[SK_MSGS] = [{"role": "assistant", "content": "Hi! How can I help today?"}]
     st.rerun()
 
 # ==========================
@@ -241,12 +229,10 @@ def get_llm_response(prompt: str, context: str) -> str:
 # ❖ UI Helpers             |
 # ==========================
 def render_chat_history(messages: List[Dict[str, str]]) -> None:
-    """Custom left/right chat with colored bubbles."""
     st.markdown('<div class="chat-wrapper">', unsafe_allow_html=True)
     for m in messages:
         role = m.get("role", "assistant")
         content = m.get("content", "")
-        # Wrap message content inside bubble; using HTML to control alignment/colors
         st.markdown(
             f"""
             <div class="msg-row {role}">
@@ -261,7 +247,6 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
 # ❖ UI: Login              |
 # ==========================
 def login_ui() -> None:
-    # Hide sidebar on login screen
     with st.sidebar:
         st.empty()
 
@@ -313,47 +298,50 @@ credentials:
 # ==========================
 def chat_ui() -> None:
     with st.sidebar:
+        # ---------- Top branding (ordered first via CSS) ----------
+        st.markdown('<div class="branding-top">', unsafe_allow_html=True)
         show_logo(center=False)
         st.markdown(
-            f'<div style="font-size:0.925rem;color:#6b7280;margin-bottom:0.5rem;">Signed in as <b>{st.session_state.get(SK_USER)}</b></div>',
+            f'<div style="font-size:0.925rem;color:#6b7280;margin:0.5rem 0 0.5rem 0;">'
+            f'Signed in as <b>{st.session_state.get(SK_USER)}</b></div>',
             unsafe_allow_html=True,
         )
         st.button("Log out", type="secondary", on_click=logout)
+        st.markdown('</div>', unsafe_allow_html=True)
 
+        # ---------- Session controls (ordered after the nav) ----------
+        st.markdown('<div class="sidebar-rest">', unsafe_allow_html=True)
         st.markdown("---")
         st.caption("Session")
-        if st.button("Clear conversation"):
-            st.session_state[SK_MSGS] = []
-            st.rerun()
+        c1, c2 = st.columns(2)
+        with c1:
+            st.button("New chat", on_click=new_chat)
+        with c2:
+            st.button("Clear conversation", on_click=clear_conversation)
+        st.markdown('</div>', unsafe_allow_html=True)
 
+    # ---------- Main chat area ----------
     st.title(APP_TITLE)
     st.header("Chat", anchor=False)
     st.caption("Assistant on the left, you on the right. Recent history is sent as context to the model.")
 
     st.session_state.setdefault(SK_MSGS, [])
-
-    # Render full history (custom bubbles)
     render_chat_history(st.session_state[SK_MSGS])
 
-    # Input (Streamlit control stays at bottom; alignment refers to bubbles above)
     prompt = st.chat_input("Type your message…")
     if prompt:
-        # Append and re-render user bubble
         st.session_state[SK_MSGS].append({"role": "user", "content": prompt})
         render_chat_history([{"role": "user", "content": prompt}])
 
-        # Build lightweight context
         recent = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
         context_text = "\n".join(f"{m['role']}: {m['content']}" for m in recent)
 
-        # Get assistant reply
         with st.spinner("Thinking…"):
             try:
                 reply = get_llm_response(prompt, context_text)
             except Exception as e:
                 reply = f"Sorry, I hit an error calling the model:\n\n```\n{e}\n```"
 
-        # Render assistant bubble and store
         render_chat_history([{"role": "assistant", "content": reply}])
         st.session_state[SK_MSGS].append({"role": "assistant", "content": reply})
 
