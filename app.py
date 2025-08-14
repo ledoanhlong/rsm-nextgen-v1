@@ -1,4 +1,3 @@
-# app.py
 from __future__ import annotations
 import os
 import json
@@ -39,6 +38,14 @@ PBI_EMBED_URL = os.getenv(
     "PBI_EMBED_URL",
     "https://app.powerbi.com/reportEmbed?reportId=90e24eba-e8f2-47a5-905c-f6365f006497&autoAuth=true&ctid=8b279c2c-479d-4b14-8903-efe33db3d877"
 )
+
+# ---------- Sidebar search mapping (edit paths to match your repo) ----------
+PAGES: Dict[str, str] = {
+    "app": "app.py",
+    "audit assistant": "pages/audit_assistant.py",
+    "TP tool": "pages/TP_tool.py",
+    "VAT Checker": "pages/VAT Checker.py",
+}
 
 # =========================
 # ❖ Page / Global Styling |
@@ -155,10 +162,7 @@ def inject_css() -> None:
 
             .pbi-frame { width: 100%; height: 100%; border: 0; display: block; }
 
-            /* Scoped expander styling
-               - Dashboard expander: light (inside .pbi-expander)
-               - Chat expander: dark (inside .chat-card)
-            */
+            /* Scoped expanders */
             .pbi-expander [data-testid="stExpander"] > details {
                 border-radius: var(--radius);
                 border: 1px solid rgba(0,0,0,0.06);
@@ -287,40 +291,27 @@ def get_llm_response(prompt: str, context: str) -> str:
 # ❖ Power BI               |
 # ==========================
 def _with_hidden_panes(url: str) -> str:
-    """
-    Ensure org-embed URL hides the nav + filter panes and removes chrome.
-    Force 'fullscreen' and FitToWidth.
-    """
     try:
         parsed = urlparse(url)
         q = dict(parse_qsl(parsed.query))
-
         q["navContentPaneEnabled"] = "false"
         q["filterPaneEnabled"]     = "false"
         q["chromeless"]            = "true"
         q["pageView"]              = "FitToWidth"
         q["fullscreen"]            = "true"
-
         new_q = urlencode(q, doseq=True)
         return urlunparse(parsed._replace(query=new_q))
     except Exception:
         return url
 
 def render_pbi_iframe_pretty(src_url: str, title: str = "Power BI Dashboard") -> None:
-    """
-    Dashboard embed. Hidden panes + chromeless applied.
-    """
     url = _with_hidden_panes(src_url)
-
     st.markdown(f"### {title}")
     st.caption("Users must be signed into Power BI to see the dashboard.")
-
-    # Centered, horizontally scrollable host so nothing gets clipped.
     st.markdown(
         '<div style="width:100%; overflow-x:auto; display:flex; justify-content:center;">',
         unsafe_allow_html=True,
     )
-    # “Fullscreen-like” default sizing
     components.iframe(url, width=1450, height=750, scrolling=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -352,11 +343,12 @@ def login_ui() -> None:
 
     show_logo(center=True)
     st.markdown('<div class="login-card">', unsafe_allow_html=True)
-    st.markdown(f'<h2 class="login-title">{APP_ICON} Sign in</h2>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="brand-muted" style="text-align:center;margin-top:-0.5rem;">Welcome back — please authenticate to continue.</p>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"""
+    <div style="background-color: var(--app-bg); border-radius: 10px; padding: 1.25rem; text-align: center; margin-bottom: 1.5rem;">
+        <h2 class="login-title" style="margin: 0 0 0.5rem 0;">{APP_ICON} Sign in</h2>
+        <p class="brand-muted" style="margin: 0;">Welcome back — please authenticate to continue.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     users = load_credentials(CREDENTIALS_PATH)
     if not users:
@@ -382,10 +374,7 @@ credentials:
         elif verify_user(users, username, password):
             st.session_state[SK_AUTH] = True
             st.session_state[SK_USER] = username
-            st.session_state.setdefault(
-                SK_MSGS,
-                [{"role": "assistant", "content": "Hi! How can I help today?"}],
-            )
+            st.session_state.setdefault(SK_MSGS, [{"role": "assistant", "content": "Hi! How can I help today?"}])
             st.success("Login successful. Loading chat…")
             st.rerun()
         else:
@@ -396,7 +385,6 @@ credentials:
 # ❖ UI: Dashboard Section  |
 # ==========================
 def dashboard_section() -> None:
-    # Expandable LIGHT card for the dashboard
     st.markdown('<div class="pbi-expander">', unsafe_allow_html=True)
     with st.expander("📊 Work Overview Dashboard", expanded=True):
         try:
@@ -412,11 +400,30 @@ def dashboard_section() -> None:
 def chat_ui() -> None:
     # ---- Sidebar ----
     with st.sidebar:
+        # Branding
         show_logo(center=False)
         st.markdown(
             f'<div style="font-size:0.925rem;color:#e5e7eb;margin-bottom:0.5rem;">Signed in as <b>{st.session_state.get(SK_USER)}</b></div>',
             unsafe_allow_html=True,
         )
+
+        # 🔎 Sidebar search (on top, above native nav)
+        # selectbox has built-in type-ahead filtering
+        selected = st.selectbox(
+            "Search or jump to page",
+            options=list(PAGES.keys()),
+            index=None,
+            placeholder="Search pages…",
+            label_visibility="collapsed",
+            key="__nav_search__",
+        )
+        if selected:
+            try:
+                st.switch_page(PAGES[selected])
+            except Exception:
+                # Fallback: show a link the user can click if switch_page isn't available
+                st.page_link(PAGES[selected], label=f"Open “{selected}” →")
+
         st.button("Log out", type="secondary", on_click=logout)
 
         st.markdown("---")
@@ -433,7 +440,6 @@ def chat_ui() -> None:
         st.session_state.setdefault(SK_MSGS, [])
         render_chat_history(st.session_state[SK_MSGS])
 
-        # Inline chat input within the frame
         with st.form("chat_form", clear_on_submit=True):
             prompt = st.text_area("Type your message…", height=80, label_visibility="collapsed", key="chat_prompt")
             send = st.form_submit_button("Send")
@@ -451,7 +457,6 @@ def chat_ui() -> None:
 
             st.session_state[SK_MSGS].append({"role": "assistant", "content": reply})
 
-            # Optional: keep only last N messages to control growth
             if len(st.session_state[SK_MSGS]) > MAX_CONTEXT_MESSAGES:
                 st.session_state[SK_MSGS] = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
 
@@ -466,11 +471,8 @@ def main() -> None:
     if not st.session_state.get(SK_AUTH):
         login_ui()
     else:
-        # Title at the very top
         st.title(APP_TITLE)
-        # Dashboard (now expandable, light)
         dashboard_section()
-        # Dark, framed, expandable Chat
         chat_ui()
 
 if __name__ == "__main__":
