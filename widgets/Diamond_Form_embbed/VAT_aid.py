@@ -1,9 +1,8 @@
 import streamlit as st
 
-st.set_page_config(page_title="RSM VAT ", layout="wide")
+st.set_page_config(page_title="RSM VAT AID ", layout="wide")
 
-st.title("RSMNL VAT aid for services in and from abroad")
-st.caption("This page embeds the DiamondForms form inside a Streamlit app.")
+st.title("RSM VAT aid for services in and from abroad")
 
 # --- Form URL (provided)
 FORM_URL = (
@@ -20,11 +19,8 @@ embed_html = f"""
 </script>
 """
 
-st.components.v1.html(embed_html, width=1500, height=1000, scrolling=True)
+st.components.v1.html(embed_html, width=1500, height=1000, scrolling=False)
 
 # --- Troubleshooting fallback
 st.markdown("---")
 st.link_button("Open form in new tab", FORM_URL, use_container_width=True)
-st.caption(
-    "This embed uses the iframeResizer script for better automatic sizing. If it still looks cut off, open the form in a new tab."
-)
