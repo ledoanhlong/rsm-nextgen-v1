@@ -16,7 +16,7 @@ import streamlit.components.v1 as components
 # ❖ Config / Constants  |
 # =======================
 APP_TITLE = "RSM NextGen Home Page"
-APP_ICON = "💬"
+APP_ICON = ".streamlit/rsm logo.png"
 APP_LAYOUT = "wide"   # wide for more room
 
 CREDENTIALS_PATH = Path("credentials.yaml")
@@ -50,73 +50,119 @@ PAGES: Dict[str, str] = {
 # =========================
 # ❖ Page / Global Styling |
 # =========================
-st.set_page_config(page_title=APP_TITLE, page_icon=APP_ICON, layout=APP_LAYOUT)
+st.set_page_config(
+    page_title=APP_TITLE,
+    page_icon=APP_ICON,
+    layout=APP_LAYOUT,
+    initial_sidebar_state="collapsed"  # start collapsed; we hard-hide it below when not authed
+)
 
 def inject_css() -> None:
     st.markdown(
         """
         <style>
-            /* Prelo font (served from /static/fonts) */
+            /* ========= Fixed theme (matches your config) ========= */
+            :root {
+                --primary-color: #009CDE;
+                --background-color: #2a2a2a;
+                --secondary-background-color: #888B8D;
+                --text-color: #ffffff;
+                --link-color: #3F9C35;
+                --border-color: #7c7c7c;
+                --code-bg: #121212;
+                --base-radius: 0.3rem;
+                --button-radius: 9999px; /* "full" */
+            }
+
+            /* Optional Prelo font */
             @font-face {
                 font-family: 'Prelo';
-                src: url('/static/fonts/Prelo-Light.woff2') format('woff2'),
-                     url('/static/fonts/Prelo-Light.woff') format('woff');
-                font-weight: 300;
-                font-style: normal;
-                font-display: swap;
+                src: url('/static/Prelo-Light.woff2') format('woff2'),
+                     url('/static/Prelo-Light.woff') format('woff');
+                font-weight: 300; font-style: normal; font-display: swap;
+            }
+            @font-face {
+                font-family: 'Prelo';
+                src: url('/static/Prelo-Regular.woff2') format('woff2'),
+                     url('/static/Prelo-Regular.woff') format('woff');
+                font-weight: 400; font-style: normal; font-display: swap;
+            }
+            @font-face {
+                font-family: 'Prelo';
+                src: url('/static/Prelo-SemiBold.woff2') format('woff2'),
+                     url('/static/Prelo-SemiBold.woff') format('woff');
+                font-weight: 600; font-style: normal; font-display: swap;
             }
 
-            :root {
-                --brand-primary: #009CDE;
-                --brand-user:    #3F9C35;
-                --text-muted:    #9aa0a6;
-                --card-bg:       #ffffff;
-                --app-bg:        #0b1220; /* darker app background */
-                --expander-bg:   #0b1220; /* dark chat panel */
-                --expander-head: #0f172a; /* darker header band */
-                --radius:        20px;
-                --shadow:        0 16px 40px rgba(0,0,0,0.25);
-            }
-
-            html, body, [class*="css"] {
+            /* Base */
+            html, body, .stApp, [class*="css"] {
+                background: var(--background-color) !important;
+                color: var(--text-color) !important;
                 font-family: 'Prelo', -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;
-                background: var(--app-bg);
             }
-
+            a { color: var(--link-color) !important; }
+            pre, code, kbd, samp { background: var(--code-bg) !important; color: var(--text-color) !important; }
             .block-container { max-width: 100%; padding-top: 1.25rem; }
 
-            .login-card {
-                background: #0f172a;
-                color: #e5e7eb;
-                padding: 1.75rem;
-                border-radius: var(--radius);
-                box-shadow: var(--shadow);
-                width: 100%;
-                max-width: 420px;
-                margin: 2.5rem auto 1rem auto;
-                border: 1px solid rgba(255,255,255,0.06);
+            /* Inputs / widgets */
+            textarea, input, select, .stTextInput input, .stTextArea textarea {
+                background-color: var(--code-bg) !important;
+                color: var(--text-color) !important;
+                border: 1px solid var(--border-color) !important;
+                border-radius: var(--base-radius) !important;
             }
-            .login-title { text-align: center; margin: 0 0 1rem 0; font-weight: 700; }
-            .brand-muted { color: var(--text-muted); }
+            .stButton>button {
+                background: var(--primary-color) !important;
+                color: #fff !important;
+                border: none !important;
+                border-radius: var(--button-radius) !important;
+            }
+            .stButton>button:hover { filter: brightness(1.05); }
 
-            .brand-logo {
-                display: block;
-                margin: 2rem auto 0.75rem auto;
-                width: 120px;
-                max-width: 45vw;
+            /* Sidebar (optional theme) */
+            section[data-testid="stSidebar"] {
+                background: #121212 !important;
+                border-right: 1px solid #696968 !important;
+                color: var(--text-color) !important;
             }
+            section[data-testid="stSidebar"] pre, 
+            section[data-testid="stSidebar"] code {
+                background: #2a2a2a !important;
+            }
+
+            /* Cards / expanders */
+            .pbi-expander [data-testid="stExpander"] > details,
+            .chat-card  [data-testid="stExpander"] > details {
+                border-radius: var(--base-radius);
+                border: 1px solid var(--border-color);
+                background: var(--secondary-background-color);
+                color: var(--text-color);
+                box-shadow: 0 16px 40px rgba(0,0,0,0.25);
+                overflow: hidden;
+            }
+            .pbi-expander [data-testid="stExpander"] > details > summary,
+            .chat-card  [data-testid="stExpander"] > details > summary {
+                padding: .8rem 1rem !important;
+                font-weight: 600;
+                color: var(--text-color);
+            }
+            .pbi-expander [data-testid="stExpander"] [data-testid="stExpanderContent"],
+            .chat-card  [data-testid="stExpander"] [data-testid="stExpanderContent"] {
+                padding: 0 .75rem 1rem .75rem;
+                background: var(--secondary-background-color);
+                color: var(--text-color);
+            }
+
+            /* Login title */
+            .login-title { text-align: center; margin: 0 0 1rem 0; font-weight: 700; }
+            .brand-muted { opacity: 0.85; }
+            .brand-logo { display: block; margin: 2rem auto 0.75rem auto; width: 120px; max-width: 45vw; }
 
             /* Chat bubbles */
-            .chat-wrapper {
-                display: flex;
-                flex-direction: column;
-                gap: 0.5rem;
-                margin-top: 0.75rem;
-            }
+            .chat-wrapper { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
             .msg-row { display: flex; width: 100%; }
             .msg-row.assistant { justify-content: flex-start; }
             .msg-row.user      { justify-content: flex-end; }
-
             .msg-bubble {
                 max-width: min(80ch, 78%);
                 padding: 0.9rem 1rem;
@@ -124,42 +170,36 @@ def inject_css() -> None:
                 line-height: 1.45;
                 border-radius: 16px;
                 box-shadow: 0 12px 28px rgba(0,0,0,0.35);
-                word-wrap: break-word;
-                white-space: pre-wrap;
-                font-weight: 400;
+                word-wrap: break-word; white-space: pre-wrap; font-weight: 400;
             }
-            .assistant .msg-bubble { background: var(--brand-primary); border-top-left-radius: 6px; }
-            .user .msg-bubble      { background: var(--brand-user);    border-top-right-radius: 6px; }
+            .assistant .msg-bubble { background: var(--primary-color); border-top-left-radius: 6px; }
+            .user .msg-bubble      { background: var(--link-color);    border-top-right-radius: 6px; }
 
-            /* Power BI card (light) */
+            /* Power BI card */
             .pbi-card {
-                position: relative;
-                width: 100%;
-                border-radius: var(--radius);
+                position: relative; width: 100%;
+                border-radius: var(--base-radius);
                 overflow: hidden;
-                box-shadow: var(--shadow);
-                background: #fff;
-                border: 1px solid rgba(0,0,0,0.05);
+                box-shadow: 0 16px 40px rgba(0,0,0,0.25);
+                background: var(--background-color);
+                border: 1px solid var(--border-color);
             }
             .pbi-card-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
+                display: flex; align-items: center; justify-content: space-between;
                 padding: .8rem 1rem;
-                border-bottom: 1px solid rgba(0,0,0,0.06);
-                background: linear-gradient(180deg, #fff, #fafafa);
+                border-bottom: 1px solid var(--border-color);
+                background: var(--secondary-background-color);
+                color: var(--text-color);
             }
-            .pbi-title { font-weight: 600; color: #111827; }
+            .pbi-title { font-weight: 600; }
             .pbi-actions { display: flex; gap: .5rem; }
             .pbi-btn {
-                border: 0;
-                border-radius: 999px;
-                padding: .4rem .8rem;
-                cursor: pointer;
-                background: #f1f5f9;
+                border: 0; border-radius: var(--button-radius);
+                padding: .4rem .8rem; cursor: pointer;
+                background: var(--secondary-background-color); color: var(--text-color);
+                outline: 1px solid var(--border-color);
             }
-            .pbi-btn:hover { background: #e5e7eb; }
-
+            .pbi-btn:hover { filter: brightness(1.1); }
             .pbi-frame { width: 100%; height: 100%; border: 0; display: block; }
 
             /* Scoped expanders */
@@ -209,6 +249,31 @@ def inject_css() -> None:
             }
 
             [data-testid="collapsedControl"] { display: none; }
+
+            /* ===== Fixed-width login FORM (bulletproof) =====
+               Target the actual <form data-testid="stForm"> Streamlit renders.
+               Change the width here to resize Username/Password and the button. */
+            .login-shell { width: 100%; display: flex; justify-content: center; }
+            .login-shell [data-testid="stForm"] {
+                width: 360px !important;
+                max-width: 90vw;
+                margin: 0 auto !important;
+            }
+            .login-shell [data-testid="stForm"] .stTextInput > div > div > input { width: 100%; }
+            .login-shell [data-testid="stForm"] .stButton > button { width: 100%; display: block; margin-top: .5rem; }
+            .login-title { text-align: center; margin: 0 0 .5rem 0; font-weight: 700; }
+            .brand-muted { text-align: center; margin: -0.25rem 0 1rem 0; opacity: .85; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def hide_sidebar_completely() -> None:
+    st.markdown(
+        """
+        <style>
+          section[data-testid="stSidebar"] { display: none !important; }
+          div[data-testid="collapsedControl"] { display: none !important; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -338,14 +403,14 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
 # ❖ UI: Login              |
 # ==========================
 def login_ui() -> None:
-    with st.sidebar:
-        st.empty()
+    # Sidebar: fully hidden when not logged in
+    hide_sidebar_completely()
 
     show_logo(center=True)
     st.markdown('<div class="login-card">', unsafe_allow_html=True)
     st.markdown(f"""
     <div style="background-color: var(--app-bg); border-radius: 10px; padding: 1.25rem; text-align: center; margin-bottom: 1.5rem;">
-        <h2 class="login-title" style="margin: 0 0 0.5rem 0;">{APP_ICON} Sign in</h2>
+        <h2 class="login-title" style="margin: 0 0 0.5rem 0;">Sign in</h2>
         <p class="brand-muted" style="margin: 0;">Welcome back — please authenticate to continue.</p>
     </div>
     """, unsafe_allow_html=True)
@@ -364,10 +429,14 @@ credentials:
                 language="yaml",
             )
 
+    # Put the form inside a shell so we can target the real <form> with CSS
+    st.markdown('<div class="login-shell">', unsafe_allow_html=True)
     with st.form("login_form", clear_on_submit=False):
         username = st.text_input("Username", key="login_username")
         password = st.text_input("Password", type="password", key="login_password")
         submitted = st.form_submit_button("Sign in")
+    st.markdown("</div>", unsafe_allow_html=True)
+
     if submitted:
         if not username or not password:
             st.warning("Please enter both username and password.")
@@ -379,7 +448,6 @@ credentials:
             st.rerun()
         else:
             st.error("Invalid username or password.")
-    st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================
 # ❖ UI: Dashboard Section  |
