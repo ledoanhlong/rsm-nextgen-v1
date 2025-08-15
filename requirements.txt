@@ -12,3 +12,4 @@ tiktoken
 jinja2
 gitpython
 openpyxl
+pydantic
