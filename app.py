@@ -454,7 +454,7 @@ credentials:
 # ==========================
 def dashboard_section() -> None:
     st.markdown('<div class="pbi-expander">', unsafe_allow_html=True)
-    with st.expander("📊 Work Overview Dashboard", expanded=True):
+    with st.expander("📊 Work Overview Dashboard", expanded=False):
         try:
             render_pbi_iframe_pretty(PBI_EMBED_URL, title="Business Strategy Consulting Work Overview")
         except Exception as e:
@@ -540,8 +540,9 @@ def main() -> None:
         login_ui()
     else:
         st.title(APP_TITLE)
-        dashboard_section()
         chat_ui()
+        dashboard_section()
+        
 
 if __name__ == "__main__":
     main()
