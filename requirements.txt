@@ -1,0 +1,9 @@
+streamlit==1.48.1
+bcrypt
+python-docx
+faiss-cpu
+pandas
+requests
+pyyaml
+jinja2
+gitpython
