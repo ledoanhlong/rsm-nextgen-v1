@@ -1,9 +1,14 @@
 streamlit==1.48.1
 bcrypt
-python-docx
 faiss-cpu
+python-docx
+pyyaml
+pdfplumber
+lxml
+numpy
 pandas
 requests
-pyyaml
+tiktoken
 jinja2
 gitpython
+openpyxl
