@@ -1,5 +1,5 @@
 import streamlit as st
-from widgets.Diamond_Form_embbed.Intake_form import render as render_intake_form  # expects your widget's render()
+from widgets.Diamond_Form_embbed.Intake_form import render as render_intake_form  
 
 # (Optional) keep it behind login, since your main app uses auth
 if not st.session_state.get("authenticated"):

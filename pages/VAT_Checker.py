@@ -1,6 +1,6 @@
 # pages/2_VAT_Checker.py
 import streamlit as st
-from widgets.vat_checker.app import render as render_vat_checker  # expects your widget's render()
+from widgets.vat_checker.app import render as render_vat_checker  
 
 # (Optional) keep it behind login, since your main app uses auth
 if not st.session_state.get("authenticated"):

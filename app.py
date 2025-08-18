@@ -41,10 +41,11 @@ PBI_EMBED_URL = os.getenv(
 
 # ---------- Sidebar search mapping (edit paths to match your repo) ----------
 PAGES: Dict[str, str] = {
-    "app": "app.py",
-    "audit assistant": "pages/audit_assistant.py",
+    "Home": "app.py",
+    "Audit Assistant": "pages/Audit_assistant.py",
     "TP tool": "pages/TP_tool.py",
     "VAT Checker": "pages/VAT Checker.py",
+    "Intake Form": "pages/Intake_Form.py",
 }
 
 # =========================
@@ -54,7 +55,7 @@ st.set_page_config(
     page_title=APP_TITLE,
     page_icon=APP_ICON,
     layout=APP_LAYOUT,
-    initial_sidebar_state="collapsed"  # start collapsed; we hard-hide it below when not authed
+    initial_sidebar_state="collapsed"  
 )
 
 def inject_css() -> None:
