@@ -46,6 +46,7 @@ PAGES: Dict[str, str] = {
     "TP tool": "pages/TP_tool.py",
     "VAT Checker": "pages/VAT Checker.py",
     "Intake Form": "pages/Intake_Form.py",
+    "Value Chain": "pages/Value_Chain_Agent.py",
 }
 
 # =========================
