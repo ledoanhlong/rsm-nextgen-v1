@@ -17,7 +17,7 @@ import streamlit.components.v1 as components
 # =======================
 APP_TITLE = "RSM NextGen Home Page"
 APP_ICON = ".streamlit/rsm logo.png"
-APP_LAYOUT = "wide"   # wide for more room
+APP_LAYOUT = "wide"
 
 CREDENTIALS_PATH = Path("credentials.yaml")
 LOGO_PATH = Path(".streamlit/rsm logo.png")
@@ -39,7 +39,7 @@ PBI_EMBED_URL = os.getenv(
     "https://app.powerbi.com/reportEmbed?reportId=90e24eba-e8f2-47a5-905c-f6365f006497&autoAuth=true&ctid=8b279c2c-479d-4b14-8903-efe33db3d877"
 )
 
-# ---------- Sidebar search mapping (edit paths to match your repo) ----------
+# ---------- Sidebar search mapping ----------
 PAGES: Dict[str, str] = {
     "Home": "app.py",
     "Audit Assistant": "pages/Audit_assistant.py",
@@ -63,7 +63,6 @@ def inject_css() -> None:
     st.markdown(
         """
         <style>
-            /* ========= Fixed theme (matches your config) ========= */
             :root {
                 --primary-color: #009CDE;
                 --background-color: #2a2a2a;
@@ -73,10 +72,8 @@ def inject_css() -> None:
                 --border-color: #7c7c7c;
                 --code-bg: #121212;
                 --base-radius: 0.3rem;
-                --button-radius: 9999px; /* "full" */
+                --button-radius: 9999px;
             }
-
-            /* Optional Prelo font */
             @font-face {
                 font-family: 'Prelo';
                 src: url('/static/Prelo-Light.woff2') format('woff2'),
@@ -95,8 +92,6 @@ def inject_css() -> None:
                      url('/static/Prelo-SemiBold.woff') format('woff');
                 font-weight: 600; font-style: normal; font-display: swap;
             }
-
-            /* Base */
             html, body, .stApp, [class*="css"] {
                 background: var(--background-color) !important;
                 color: var(--text-color) !important;
@@ -106,7 +101,6 @@ def inject_css() -> None:
             pre, code, kbd, samp { background: var(--code-bg) !important; color: var(--text-color) !important; }
             .block-container { max-width: 100%; padding-top: 1.25rem; }
 
-            /* Inputs / widgets */
             textarea, input, select, .stTextInput input, .stTextArea textarea {
                 background-color: var(--code-bg) !important;
                 color: var(--text-color) !important;
@@ -121,18 +115,14 @@ def inject_css() -> None:
             }
             .stButton>button:hover { filter: brightness(1.05); }
 
-            /* Sidebar (optional theme) */
             section[data-testid="stSidebar"] {
                 background: #121212 !important;
                 border-right: 1px solid #696968 !important;
                 color: var(--text-color) !important;
             }
             section[data-testid="stSidebar"] pre, 
-            section[data-testid="stSidebar"] code {
-                background: #2a2a2a !important;
-            }
+            section[data-testid="stSidebar"] code { background: #2a2a2a !important; }
 
-            /* Cards / expanders */
             .pbi-expander [data-testid="stExpander"] > details,
             .chat-card  [data-testid="stExpander"] > details {
                 border-radius: var(--base-radius);
@@ -155,12 +145,10 @@ def inject_css() -> None:
                 color: var(--text-color);
             }
 
-            /* Login title */
             .login-title { text-align: center; margin: 0 0 1rem 0; font-weight: 700; }
             .brand-muted { opacity: 0.85; }
             .brand-logo { display: block; margin: 2rem auto 0.75rem auto; width: 120px; max-width: 45vw; }
 
-            /* Chat bubbles */
             .chat-wrapper { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
             .msg-row { display: flex; width: 100%; }
             .msg-row.assistant { justify-content: flex-start; }
@@ -177,87 +165,52 @@ def inject_css() -> None:
             .assistant .msg-bubble { background: var(--primary-color); border-top-left-radius: 6px; }
             .user .msg-bubble      { background: var(--link-color);    border-top-right-radius: 6px; }
 
-            /* Power BI card */
-            .pbi-card {
-                position: relative; width: 100%;
-                border-radius: var(--base-radius);
-                overflow: hidden;
-                box-shadow: 0 16px 40px rgba(0,0,0,0.25);
-                background: var(--background-color);
-                border: 1px solid var(--border-color);
-            }
-            .pbi-card-header {
-                display: flex; align-items: center; justify-content: space-between;
-                padding: .8rem 1rem;
-                border-bottom: 1px solid var(--border-color);
-                background: var(--secondary-background-color);
-                color: var(--text-color);
-            }
+            .pbi-card { position: relative; width: 100%; border-radius: var(--base-radius);
+                overflow: hidden; box-shadow: 0 16px 40px rgba(0,0,0,0.25);
+                background: var(--background-color); border: 1px solid var(--border-color); }
+            .pbi-card-header { display: flex; align-items: center; justify-content: space-between;
+                padding: .8rem 1rem; border-bottom: 1px solid var(--border-color);
+                background: var(--secondary-background-color); color: var(--text-color); }
             .pbi-title { font-weight: 600; }
             .pbi-actions { display: flex; gap: .5rem; }
-            .pbi-btn {
-                border: 0; border-radius: var(--button-radius);
-                padding: .4rem .8rem; cursor: pointer;
-                background: var(--secondary-background-color); color: var(--text-color);
-                outline: 1px solid var(--border-color);
-            }
+            .pbi-btn { border: 0; border-radius: var(--button-radius);
+                padding: .4rem .8rem; cursor: pointer; background: var(--secondary-background-color);
+                color: var(--text-color); outline: 1px solid var(--border-color); }
             .pbi-btn:hover { filter: brightness(1.1); }
             .pbi-frame { width: 100%; height: 100%; border: 0; display: block; }
 
-            /* Scoped expanders */
             .pbi-expander [data-testid="stExpander"] > details {
-                border-radius: var(--radius);
-                border: 1px solid rgba(0,0,0,0.06);
-                box-shadow: var(--shadow);
-                background: #fff;
-                overflow: hidden;
+                border-radius: var(--radius); border: 1px solid rgba(0,0,0,0.06);
+                box-shadow: var(--shadow); background: #fff; overflow: hidden;
             }
             .pbi-expander [data-testid="stExpander"] > details > summary {
-                padding: .8rem 1rem !important;
-                background: linear-gradient(180deg, #fff, #f8fafc);
-                font-weight: 600;
-                color: #111827;
+                padding: .8rem 1rem !important; background: linear-gradient(180deg, #fff, #f8fafc);
+                font-weight: 600; color: #111827;
             }
             .pbi-expander [data-testid="stExpander"] [data-testid="stExpanderContent"] {
-                padding: 0 .75rem 1rem .75rem;
-                background: #fff;
-                color: #111827;
+                padding: 0 .75rem 1rem .75rem; background: #fff; color: #111827;
             }
-
             .chat-card [data-testid="stExpander"] > details {
-                border-radius: var(--radius);
-                border: 1px solid rgba(255,255,255,0.08);
-                box-shadow: var(--shadow);
-                background: var(--expander-bg);
-                overflow: hidden;
+                border-radius: var(--radius); border: 1px solid rgba(255,255,255,0.08);
+                box-shadow: var(--shadow); background: var(--expander-bg); overflow: hidden;
             }
             .chat-card [data-testid="stExpander"] > details > summary {
-                padding: .8rem 1rem !important;
-                background: linear-gradient(180deg, var(--expander-head), var(--expander-bg));
-                font-weight: 600;
-                color: #e5e7eb;
+                padding: .8rem 1rem !important; background: linear-gradient(180deg, var(--expander-head), var(--expander-bg));
+                font-weight: 600; color: #e5e7eb;
             }
             .chat-card [data-testid="stExpander"] [data-testid="stExpanderContent"] {
-                padding: 0 .75rem 1rem .75rem;
-                background: var(--expander-bg);
-                color: #e5e7eb;
+                padding: 0 .75rem 1rem .75rem; background: var(--expander-bg); color: #e5e7eb;
             }
 
-            /* Dark inputs */
             textarea, input, select {
-                background-color: #0f172a !important;
-                color: #e5e7eb !important;
+                background-color: #0f172a !important; color: #e5e7eb !important;
                 border-color: rgba(255,255,255,0.12) !important;
             }
-
             [data-testid="collapsedControl"] { display: none; }
 
-            /* ===== Fixed-width login FORM ===== */
             .login-shell { width: 100%; display: flex; justify-content: center; }
             .login-shell [data-testid="stForm"] {
-                width: 360px !important;
-                max-width: 90vw;
-                margin: 0 auto !important;
+                width: 360px !important; max-width: 90vw; margin: 0 auto !important;
             }
             .login-shell [data-testid="stForm"] .stTextInput > div > div > input { width: 100%; }
             .login-shell [data-testid="stForm"] .stButton > button { width: 100%; display: block; margin-top: .5rem; }
@@ -331,10 +284,8 @@ def logout() -> None:
 # ==========================
 def to_pf_chat_history(msgs: List[Dict[str, str]], max_pairs: int = 6) -> List[Dict]:
     """
-    Convert st.session_state[SK_MSGS] (list of {'role','content'}) into
-    Prompt Flow's chat_history schema:
-      [{inputs:{chat_input:...}, outputs:{chat_output:...}}, ...]
-    Takes the most recent user/assistant pairs.
+    Convert st.session_state[SK_MSGS] to Prompt Flow's chat_history schema:
+    [{inputs:{chat_input:...}, outputs:{chat_output:...}}, ...]
     """
     pairs = []
     cur_user = None
@@ -365,19 +316,17 @@ def get_llm_response(prompt: str, context: str) -> str:
     headers = {"Content-Type": "application/json"}
     if is_aml:
         headers["Authorization"] = f"Bearer {LLM_API_KEY}"
-        # If needed to pin a specific deployment on AML:
-        # headers["azureml-model-deployment"] = "<deployment-name>"
+        # headers["azureml-model-deployment"] = "<deployment-name>"  # if needed
     else:
         headers["api-key"] = LLM_API_KEY
 
-    # Build Prompt Flow inputs: chat_input + chat_history
     history_pf = to_pf_chat_history(st.session_state.get(SK_MSGS, []))
-    payload = {
-        "inputs": {
-            "chat_input": prompt,
-            "chat_history": history_pf
-        }
-    }
+
+    # IMPORTANT:
+    # - AML Online Endpoint expects: {"input_data": {"inputs": {...}}}
+    # - AI Studio/Inference endpoint expects: {"inputs": {...}}
+    inputs_block = {"chat_input": prompt, "chat_history": history_pf}
+    payload = {"input_data": {"inputs": inputs_block}} if is_aml else {"inputs": inputs_block}
 
     try:
         resp = requests.post(LLM_ENDPOINT, headers=headers, json=payload, timeout=60)
@@ -388,20 +337,24 @@ def get_llm_response(prompt: str, context: str) -> str:
         which = "AML" if is_aml else ("AI Studio" if is_ai_studio else "Unknown")
         raise RuntimeError(f"LLM error {resp.status_code} ({which}): {resp.text}")
 
-    data = resp.json()
+    data = {}
+    try:
+        data = resp.json()
+    except Exception:
+        # Some AML endpoints wrap results in plain text; show it for debugging
+        return resp.text
 
-    # Parse common Prompt Flow response shapes
+    # Common Prompt Flow response shapes
     content = (
-        ((data.get("outputs") or {}).get("chat_output"))  # most common
+        ((data.get("outputs") or {}).get("chat_output"))  # typical PF
         or data.get("chat_output")                        # flattened
-        # fallbacks if flow is tweaked later
-        or ((data.get("outputs") or {}).get("output"))
+        or ((data.get("outputs") or {}).get("output"))    # alt key
         or data.get("output")
-        or data.get("answer")
         # OpenAI-style fallback
         or ((data.get("choices", [{}])[0].get("message", {}) or {}).get("content"))
     )
     if not content:
+        # Help debug unexpected shapes
         content = json.dumps(data, ensure_ascii=False)
     return content
 
@@ -441,17 +394,11 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
     for m in messages:
         role = m.get("role", "assistant")
         content = m.get("content", "") or ""
-
-        # Bubble wrapper
         st.markdown(f'<div class="msg-row {role}"><div class="msg-bubble">', unsafe_allow_html=True)
-
         if role == "assistant":
-            # Render as Markdown (safe, HTML disabled), so **bold**, lists, code blocks work
-            st.markdown(str(content))
+            st.markdown(str(content))  # Markdown render
         else:
-            # Escape user text to avoid injection
             st.markdown(html.escape(str(content)), unsafe_allow_html=False)
-
         st.markdown('</div></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -459,18 +406,18 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
 # ❖ UI: Login              |
 # ==========================
 def login_ui() -> None:
-    # Sidebar: fully hidden when not logged in
     hide_sidebar_completely()
-
     show_logo(center=True)
     st.markdown('<div class="login-card">', unsafe_allow_html=True)
-    st.markdown(f"""
-    <div style="background-color: var(--app-bg); border-radius: 10px; padding: 1.25rem; text-align: center; margin-bottom: 1.5rem;">
-        <h2 class="login-title" style="margin: 0 0 0.5rem 0;">Sign in</h2>
-        <p class="brand-muted" style="margin: 0;">Welcome back — please authenticate to continue.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
+    st.markdown(
+        """
+        <div style="background-color: var(--app-bg); border-radius: 10px; padding: 1.25rem; text-align: center; margin-bottom: 1.5rem;">
+            <h2 class="login-title" style="margin: 0 0 0.5rem 0;">Sign in</h2>
+            <p class="brand-muted" style="margin: 0;">Welcome back — please authenticate to continue.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     users = load_credentials(CREDENTIALS_PATH)
     if not users:
         with st.expander("Setup help (credentials.yaml not found or empty)"):
@@ -484,8 +431,6 @@ credentials:
 """,
                 language="yaml",
             )
-
-    # Put the form inside a shell so we can target the real <form> with CSS
     st.markdown('<div class="login-shell">', unsafe_allow_html=True)
     with st.form("login_form", clear_on_submit=False):
         username = st.text_input("Username", key="login_username")
@@ -519,19 +464,15 @@ def dashboard_section() -> None:
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================
-# ❖ UI: Chat (dark, framed)|
+# ❖ UI: Chat               |
 # ==========================
 def chat_ui() -> None:
-    # ---- Sidebar ----
     with st.sidebar:
-        # Branding
         show_logo(center=False)
         st.markdown(
             f'<div style="font-size:0.925rem;color:#e5e7eb;margin-bottom:0.5rem;">Signed in as <b>{st.session_state.get(SK_USER)}</b></div>',
             unsafe_allow_html=True,
         )
-
-        # 🔎 Sidebar search (on top, above native nav)
         selected = st.selectbox(
             "Search or jump to page",
             options=list(PAGES.keys()),
@@ -544,18 +485,14 @@ def chat_ui() -> None:
             try:
                 st.switch_page(PAGES[selected])
             except Exception:
-                # Fallback: show a link the user can click if switch_page isn't available
                 st.page_link(PAGES[selected], label=f"Open “{selected}” →")
-
         st.button("Log out", type="secondary", on_click=logout)
-
         st.markdown("---")
         st.caption("Session")
         if st.button("Clear conversation"):
             st.session_state[SK_MSGS] = [{"role": "assistant", "content": "Hi! How can I help today?"}]
             st.rerun()
 
-    # ---- Chat Card (DARK expander) ----
     st.markdown('<div class="chat-card">', unsafe_allow_html=True)
     with st.expander("💬 Chat", expanded=True):
         st.title("RSM Brain")
@@ -568,22 +505,16 @@ def chat_ui() -> None:
             send = st.form_submit_button("Send")
         if send and prompt and prompt.strip():
             st.session_state[SK_MSGS].append({"role": "user", "content": prompt.strip()})
-
-            # Build a lightweight textual context if you want to keep it (optional)
             recent = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
             context_text = "\n".join(f"{m['role']}: {m['content']}" for m in recent)
-
             with st.spinner("Thinking…"):
                 try:
                     reply = get_llm_response(prompt.strip(), context_text)
                 except Exception as e:
                     reply = f"Sorry, I hit an error calling the model:\n\n```\n{e}\n```"
-
             st.session_state[SK_MSGS].append({"role": "assistant", "content": reply})
-
             if len(st.session_state[SK_MSGS]) > MAX_CONTEXT_MESSAGES:
                 st.session_state[SK_MSGS] = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
-
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
