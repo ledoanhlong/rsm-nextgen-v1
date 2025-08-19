@@ -4,7 +4,7 @@ import json
 import base64
 import html
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple, Optional
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 import bcrypt
 import requests
@@ -32,6 +32,13 @@ SK_MSGS = "messages"
 
 MAX_CONTEXT_MESSAGES = 12
 SYSTEM_PROMPT_PREFIX = "You are a helpful assistant. Here is chat context:\n"
+
+# This text (or fragments of it) signals the flow's **default** response
+DEFAULT_SIGNATURES = [
+    "Steps to Create a Compute Instance Using AzureML SDK v2",
+    "TL;DR: To create an Azure Machine Learning compute instance",
+    "Use the AzureML SDK v2 to define and create a compute instance",
+]
 
 # ---------- Power BI org-embed URL ----------
 PBI_EMBED_URL = os.getenv(
@@ -74,24 +81,6 @@ def inject_css() -> None:
                 --base-radius: 0.3rem;
                 --button-radius: 9999px;
             }
-            @font-face {
-                font-family: 'Prelo';
-                src: url('/static/Prelo-Light.woff2') format('woff2'),
-                     url('/static/Prelo-Light.woff') format('woff');
-                font-weight: 300; font-style: normal; font-display: swap;
-            }
-            @font-face {
-                font-family: 'Prelo';
-                src: url('/static/Prelo-Regular.woff2') format('woff2'),
-                     url('/static/Prelo-Regular.woff') format('woff');
-                font-weight: 400; font-style: normal; font-display: swap;
-            }
-            @font-face {
-                font-family: 'Prelo';
-                src: url('/static/Prelo-SemiBold.woff2') format('woff2'),
-                     url('/static/Prelo-SemiBold.woff') format('woff');
-                font-weight: 600; font-style: normal; font-display: swap;
-            }
             html, body, .stApp, [class*="css"] {
                 background: var(--background-color) !important;
                 color: var(--text-color) !important;
@@ -120,34 +109,6 @@ def inject_css() -> None:
                 border-right: 1px solid #696968 !important;
                 color: var(--text-color) !important;
             }
-            section[data-testid="stSidebar"] pre, 
-            section[data-testid="stSidebar"] code { background: #2a2a2a !important; }
-
-            .pbi-expander [data-testid="stExpander"] > details,
-            .chat-card  [data-testid="stExpander"] > details {
-                border-radius: var(--base-radius);
-                border: 1px solid var(--border-color);
-                background: var(--secondary-background-color);
-                color: var(--text-color);
-                box-shadow: 0 16px 40px rgba(0,0,0,0.25);
-                overflow: hidden;
-            }
-            .pbi-expander [data-testid="stExpander"] > details > summary,
-            .chat-card  [data-testid="stExpander"] > details > summary {
-                padding: .8rem 1rem !important;
-                font-weight: 600;
-                color: var(--text-color);
-            }
-            .pbi-expander [data-testid="stExpander"] [data-testid="stExpanderContent"],
-            .chat-card  [data-testid="stExpander"] [data-testid="stExpanderContent"] {
-                padding: 0 .75rem 1rem .75rem;
-                background: var(--secondary-background-color);
-                color: var(--text-color);
-            }
-
-            .login-title { text-align: center; margin: 0 0 1rem 0; font-weight: 700; }
-            .brand-muted { opacity: 0.85; }
-            .brand-logo { display: block; margin: 2rem auto 0.75rem auto; width: 120px; max-width: 45vw; }
 
             .chat-wrapper { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
             .msg-row { display: flex; width: 100%; }
@@ -165,47 +126,6 @@ def inject_css() -> None:
             .assistant .msg-bubble { background: var(--primary-color); border-top-left-radius: 6px; }
             .user .msg-bubble      { background: var(--link-color);    border-top-right-radius: 6px; }
 
-            .pbi-card { position: relative; width: 100%; border-radius: var(--base-radius);
-                overflow: hidden; box-shadow: 0 16px 40px rgba(0,0,0,0.25);
-                background: var(--background-color); border: 1px solid var(--border-color); }
-            .pbi-card-header { display: flex; align-items: center; justify-content: space-between;
-                padding: .8rem 1rem; border-bottom: 1px solid var(--border-color);
-                background: var(--secondary-background-color); color: var(--text-color); }
-            .pbi-title { font-weight: 600; }
-            .pbi-actions { display: flex; gap: .5rem; }
-            .pbi-btn { border: 0; border-radius: var(--button-radius);
-                padding: .4rem .8rem; cursor: pointer; background: var(--secondary-background-color);
-                color: var(--text-color); outline: 1px solid var(--border-color); }
-            .pbi-btn:hover { filter: brightness(1.1); }
-            .pbi-frame { width: 100%; height: 100%; border: 0; display: block; }
-
-            .pbi-expander [data-testid="stExpander"] > details {
-                border-radius: var(--radius); border: 1px solid rgba(0,0,0,0.06);
-                box-shadow: var(--shadow); background: #fff; overflow: hidden;
-            }
-            .pbi-expander [data-testid="stExpander"] > details > summary {
-                padding: .8rem 1rem !important; background: linear-gradient(180deg, #fff, #f8fafc);
-                font-weight: 600; color: #111827;
-            }
-            .pbi-expander [data-testid="stExpander"] [data-testid="stExpanderContent"] {
-                padding: 0 .75rem 1rem .75rem; background: #fff; color: #111827;
-            }
-            .chat-card [data-testid="stExpander"] > details {
-                border-radius: var(--radius); border: 1px solid rgba(255,255,255,0.08);
-                box-shadow: var(--shadow); background: var(--expander-bg); overflow: hidden;
-            }
-            .chat-card [data-testid="stExpander"] > details > summary {
-                padding: .8rem 1rem !important; background: linear-gradient(180deg, var(--expander-head), var(--expander-bg));
-                font-weight: 600; color: #e5e7eb;
-            }
-            .chat-card [data-testid="stExpander"] [data-testid="stExpanderContent"] {
-                padding: 0 .75rem 1rem .75rem; background: var(--expander-bg); color: #e5e7eb;
-            }
-
-            textarea, input, select {
-                background-color: #0f172a !important; color: #e5e7eb !important;
-                border-color: rgba(255,255,255,0.12) !important;
-            }
             [data-testid="collapsedControl"] { display: none; }
 
             .login-shell { width: 100%; display: flex; justify-content: center; }
@@ -214,8 +134,6 @@ def inject_css() -> None:
             }
             .login-shell [data-testid="stForm"] .stTextInput > div > div > input { width: 100%; }
             .login-shell [data-testid="stForm"] .stButton > button { width: 100%; display: block; margin-top: .5rem; }
-            .login-title { text-align: center; margin: 0 0 .5rem 0; font-weight: 700; }
-            .brand-muted { text-align: center; margin: -0.25rem 0 1rem 0; opacity: .85; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -232,7 +150,7 @@ def hide_sidebar_completely() -> None:
         unsafe_allow_html=True,
     )
 
-def logo_img_base64() -> str | None:
+def logo_img_base64() -> Optional[str]:
     if LOGO_PATH and LOGO_PATH.exists():
         try:
             return base64.b64encode(LOGO_PATH.read_bytes()).decode("utf-8")
@@ -302,6 +220,34 @@ def to_pf_chat_history(msgs: List[Dict[str, str]], max_pairs: int = 6) -> List[D
             cur_user = None
     return pairs[-max_pairs:]
 
+def looks_like_default(text: str) -> bool:
+    t = (text or "").strip()
+    for sig in DEFAULT_SIGNATURES:
+        if sig.lower() in t.lower():
+            return True
+    return False
+
+def parse_pf_response(data: dict) -> Optional[str]:
+    """
+    Extract chat text from common Prompt Flow / AI Studio responses.
+    """
+    # Prompt Flow shapes
+    out = (data.get("outputs") or {}).get("chat_output")
+    if out:
+        return out
+    out = data.get("chat_output")
+    if out:
+        return out
+    # Some flows use "output"
+    out = (data.get("outputs") or {}).get("output") or data.get("output")
+    if out:
+        return out
+    # OpenAI-style fallback
+    try:
+        return (data.get("choices", [{}])[0].get("message", {}) or {}).get("content")
+    except Exception:
+        return None
+
 # ==========================
 # ❖ LLM Call               |
 # ==========================
@@ -316,47 +262,83 @@ def get_llm_response(prompt: str, context: str) -> str:
     headers = {"Content-Type": "application/json"}
     if is_aml:
         headers["Authorization"] = f"Bearer {LLM_API_KEY}"
-        # headers["azureml-model-deployment"] = "<deployment-name>"  # if needed
     else:
         headers["api-key"] = LLM_API_KEY
 
     history_pf = to_pf_chat_history(st.session_state.get(SK_MSGS, []))
 
-    # IMPORTANT:
-    # - AML Online Endpoint expects: {"input_data": {"inputs": {...}}}
-    # - AI Studio/Inference endpoint expects: {"inputs": {...}}
+    # ---- Try the most likely payload shapes IN ORDER ----
     inputs_block = {"chat_input": prompt, "chat_history": history_pf}
-    payload = {"input_data": {"inputs": inputs_block}} if is_aml else {"inputs": inputs_block}
+    messages_ooai = [
+        {"role": "system", "content": SYSTEM_PROMPT_PREFIX + context},
+        {"role": "user", "content": prompt},
+    ]
 
-    try:
-        resp = requests.post(LLM_ENDPOINT, headers=headers, json=payload, timeout=60)
-    except requests.RequestException as e:
-        raise RuntimeError(f"Network error calling LLM: {e}")
+    payload_attempts: List[Tuple[str, dict]] = []
 
-    if resp.status_code != 200:
-        which = "AML" if is_aml else ("AI Studio" if is_ai_studio else "Unknown")
-        raise RuntimeError(f"LLM error {resp.status_code} ({which}): {resp.text}")
+    if is_aml:
+        # AML often needs input_data wrapping
+        payload_attempts.extend([
+            ("aml.input_data.inputs",         {"input_data": {"inputs": inputs_block}}),
+            ("aml.input_data.flat",           {"input_data": inputs_block}),
+            ("aml.flat",                      inputs_block),
+            ("aml.openai_messages_in_input",  {"input_data": {"inputs": {"messages": messages_ooai}}}),
+        ])
+    else:
+        # AI Studio typically uses "inputs"
+        payload_attempts.extend([
+            ("ai.inputs",                     {"inputs": inputs_block}),
+            ("ai.inputs.messages",            {"inputs": {"messages": messages_ooai}}),
+            ("ai.flat",                       inputs_block),
+        ])
 
-    data = {}
-    try:
-        data = resp.json()
-    except Exception:
-        # Some AML endpoints wrap results in plain text; show it for debugging
-        return resp.text
+    last_status = None
+    last_text = None
 
-    # Common Prompt Flow response shapes
-    content = (
-        ((data.get("outputs") or {}).get("chat_output"))  # typical PF
-        or data.get("chat_output")                        # flattened
-        or ((data.get("outputs") or {}).get("output"))    # alt key
-        or data.get("output")
-        # OpenAI-style fallback
-        or ((data.get("choices", [{}])[0].get("message", {}) or {}).get("content"))
+    for label, payload in payload_attempts:
+        try:
+            resp = requests.post(LLM_ENDPOINT, headers=headers, json=payload, timeout=60)
+            last_status = resp.status_code
+            last_text = resp.text
+            if resp.status_code != 200:
+                continue
+
+            # Parse JSON (fall back to raw text if not JSON)
+            try:
+                data = resp.json()
+            except Exception:
+                # Some endpoints return plain text; if it doesn't look like default, accept it.
+                if last_text and not looks_like_default(last_text):
+                    return last_text
+                else:
+                    continue
+
+            content = parse_pf_response(data)
+            if not content:
+                # If no content field, try dumping the data
+                candidate = json.dumps(data, ensure_ascii=False)
+                if candidate and not looks_like_default(candidate):
+                    return candidate
+                continue
+
+            # Reject default response; try next payload
+            if looks_like_default(content):
+                continue
+
+            # Success
+            return content
+
+        except requests.RequestException as e:
+            last_text = f"Network error calling LLM: {e}"
+            continue
+
+    # If we got here, none of the shapes produced a non-default answer
+    details = f"Last status: {last_status}; Last body: {last_text}"
+    raise RuntimeError(
+        "Endpoint accepted the call but appears to ignore inputs (still returns the flow's default). "
+        "This usually means the managed online endpoint expects a different request schema. "
+        "Tried multiple payload shapes without success.\n\n" + details
     )
-    if not content:
-        # Help debug unexpected shapes
-        content = json.dumps(data, ensure_ascii=False)
-    return content
 
 # ==========================
 # ❖ Power BI               |
