@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 import time
-
+import re
 import bcrypt
 import requests
 import streamlit as st
@@ -375,6 +375,91 @@ def render_pbi_iframe_pretty(src_url: str, title: str = "Power BI Dashboard") ->
 # ==========================
 # ❖ UI Helpers             |
 # ==========================
+def _tidy_llm_text(text: str) -> str:
+    """Normalize spacing, bullets, and common headings."""
+    t = (text or "").strip()
+
+    # Collapse 3+ newlines to 2
+    t = re.sub(r"\n{3,}", "\n\n", t)
+
+    # Normalize Windows newlines, strip trailing spaces
+    t = t.replace("\r\n", "\n")
+    t = "\n".join(line.rstrip() for line in t.split("\n"))
+
+    # Convert common bold-headings like **TL;DR:** to markdown headings
+    t = re.sub(r"^\s*\*\*TL;DR:\*\*\s*", "### TL;DR\n\n", t, flags=re.IGNORECASE | re.MULTILINE)
+
+    # Ensure list markers are consistent (dash + space)
+    t = re.sub(r"^\s*•\s+", "- ", t, flags=re.MULTILINE)
+    t = re.sub(r"^\s*–\s+", "- ", t, flags=re.MULTILINE)
+    t = re.sub(r"^\s*\*\s+", "- ", t, flags=re.MULTILINE)
+
+    # Tighten lists: remove empty lines between list items
+    lines = t.split("\n")
+    out = []
+    prev_was_li = False
+    for ln in lines:
+        is_li = bool(re.match(r"^\s*-\s+", ln))
+        if is_li and prev_was_li and out and out[-1] == "":
+            out.pop()  # drop blank line between bullets
+        out.append(ln)
+        prev_was_li = is_li
+    t = "\n".join(out)
+
+    return t
+
+def _markdown_to_html(md_text: str) -> str:
+    """Best-effort Markdown → HTML. Uses 'markdown' lib if available, else a light fallback."""
+    try:
+        import markdown  # type: ignore
+        # Use sane lists and extra if available
+        return markdown.markdown(md_text, extensions=["sane_lists", "extra"])
+    except Exception:
+        # Very small fallback: bold, headings (###/##/#), and dash lists
+        html = md_text
+
+        # Escape HTML first to avoid injection; we'll re-insert <br>, <strong>, <ul>/<li>, <h3>
+        esc = html
+        esc = html_escape(esc := html) if False else html  # no-op placeholder, we’ll escape per-part below
+
+        # Headings (### ...)
+        def h3(m): return f"<h3>{html.escape(m.group(1).strip())}</h3>"
+        esc = re.sub(r"^\s*###\s+(.+)$", h3, esc, flags=re.MULTILINE)
+
+        # Bold **text**
+        def bold(m): return f"<strong>{html.escape(m.group(1))}</strong>"
+        esc = re.sub(r"\*\*(.+?)\*\*", bold, esc)
+
+        # Lists: wrap consecutive - items into <ul><li>..</li></ul>
+        lines = esc.split("\n")
+        out = []
+        in_ul = False
+        for ln in lines:
+            m = re.match(r"^\s*-\s+(.+)", ln)
+            if m:
+                if not in_ul:
+                    out.append("<ul>")
+                    in_ul = True
+                out.append(f"<li>{html.escape(m.group(1))}</li>")
+            else:
+                if in_ul:
+                    out.append("</ul>")
+                    in_ul = False
+                if ln.strip():
+                    out.append(f"<p>{html.escape(ln)}</p>")
+                else:
+                    out.append("")
+        if in_ul:
+            out.append("</ul>")
+        # Preserve blank lines
+        return "\n".join(out)
+
+def format_llm_reply_to_html(raw_text: str) -> str:
+    """Pipeline: tidy text then render to HTML."""
+    tidy = _tidy_llm_text(raw_text)
+    html_out = _markdown_to_html(tidy)
+    return html_out
+
 def render_chat_history(messages: List[Dict[str, str]]) -> None:
     for m in messages:
         role = m.get("role", "assistant")
@@ -382,7 +467,14 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
         chat_role = "user" if role == "user" else "assistant"
 
         bubble_color = "#009CDE" if chat_role == "assistant" else "#3F9C35"
-        safe = html.escape(content)
+
+        if chat_role == "assistant":
+            # Format LLM markdown to HTML for nicer rendering
+            inner_html = format_llm_reply_to_html(content)
+        else:
+            # User: escape everything, keep as plain text (with line breaks)
+            inner_html = html.escape(content).replace("\n", "<br>")
+
         with st.chat_message(chat_role):
             st.markdown(
                 f"""
@@ -400,13 +492,12 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
                       max-width:min(80ch, 78%);
                       line-height:1.45;
                       word-wrap:break-word;
-                      white-space:pre-wrap;
-                  ">{safe}</div>
+                      white-space:normal;
+                  ">{inner_html}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-
 # ==========================
 # ❖ UI: Login              |
 # ==========================
@@ -524,7 +615,7 @@ def chat_ui() -> None:
     st.title(APP_TITLE)
 
     with st.expander("💬 Chat", expanded=True):
-        st.header("RSM Brain")
+        st.header("🧠 RSM Brain")
         st.session_state.setdefault(SK_MSGS, [])
         render_chat_history(st.session_state[SK_MSGS])
 
