@@ -33,11 +33,11 @@ LOGO_PATH = Path(".streamlit/rsm logo.png")
 # ---- Registered tool pages (label -> path)
 TOOLS: Dict[str, str] = {
     "VAT Checker": "pages/VAT_Checker.py",
-    "Audit Assistant": "pages/Audit_assistant.py",
+    "Audit Assistant": "pages/Audit_assistant.py",  # <-- this page
     "Transfer Pricing Tool": "pages/TP_tool.py",
     "Value Chain Agent": "pages/Value_Chain_Agent.py",
     "Intake Form": "pages/Intake_Form.py",
-    "Work Overview Dashboard": "pages/Work_Overview_Dashboard.py",
+    "Work Overview Dashboard": "pages/Work Overview Dashboard.py",
 }
 
 # ---------- LLM Settings ----------

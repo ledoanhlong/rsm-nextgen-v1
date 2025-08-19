@@ -20,14 +20,13 @@ SK_MSGS = "messages"
 
 # ---- Registered tool pages (keep in sync with Home/Application)
 TOOLS: Dict[str, str] = {
-    "VAT Checker": "pages/2_VAT_Checker.py",
-    "Audit Assistant": "pages/4_RAG_Audit_Assistant.py",
-    "Transfer Pricing Tool": "pages/3_TP_Template_Filler.py",  # <-- this page
-    "Value Chain Agent": "pages/5_RAG_Audit_Assistant.py",
+    "VAT Checker": "pages/VAT_Checker.py",
+    "Audit Assistant": "pages/Audit_assistant.py",  # <-- this page
+    "Transfer Pricing Tool": "pages/TP_tool.py",
+    "Value Chain Agent": "pages/Value_Chain_Agent.py",
     "Intake Form": "pages/Intake_Form.py",
-    "Work Overview Dashboard": "pages/Work_Overview_Dashboard.py",
+    "Work Overview Dashboard": "pages/Work Overview Dashboard.py",
 }
-
 # ====== Page config ======
 st.set_page_config(page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout=APP_LAYOUT, initial_sidebar_state="expanded")
 
