@@ -56,12 +56,8 @@ st.set_page_config(
     page_title=APP_TITLE,
     page_icon=APP_ICON,
     layout=APP_LAYOUT,
-    initial_sidebar_state="collapsed"  
+    initial_sidebar_state="collapsed"
 )
-
-import streamlit as st
-
-st.set_page_config(page_title="RSM NextGen", layout="wide", initial_sidebar_state="collapsed")
 
 def inject_css() -> None:
     st.markdown(
@@ -256,9 +252,7 @@ def inject_css() -> None:
 
             [data-testid="collapsedControl"] { display: none; }
 
-            /* ===== Fixed-width login FORM (bulletproof) =====
-               Target the actual <form data-testid="stForm"> Streamlit renders.
-               Change the width here to resize Username/Password and the button. */
+            /* ===== Fixed-width login FORM ===== */
             .login-shell { width: 100%; display: flex; justify-content: center; }
             .login-shell [data-testid="stForm"] {
                 width: 360px !important;
@@ -333,6 +327,31 @@ def logout() -> None:
     st.rerun()
 
 # ==========================
+# ❖ Prompt Flow helpers    |
+# ==========================
+def to_pf_chat_history(msgs: List[Dict[str, str]], max_pairs: int = 6) -> List[Dict]:
+    """
+    Convert st.session_state[SK_MSGS] (list of {'role','content'}) into
+    Prompt Flow's chat_history schema:
+      [{inputs:{chat_input:...}, outputs:{chat_output:...}}, ...]
+    Takes the most recent user/assistant pairs.
+    """
+    pairs = []
+    cur_user = None
+    for m in msgs:
+        role = m.get("role")
+        text = (m.get("content") or "").strip()
+        if not text:
+            continue
+        if role == "user":
+            cur_user = text
+        elif role == "assistant" and cur_user is not None:
+            pairs.append({"inputs": {"chat_input": cur_user},
+                          "outputs": {"chat_output": text}})
+            cur_user = None
+    return pairs[-max_pairs:]
+
+# ==========================
 # ❖ LLM Call               |
 # ==========================
 def get_llm_response(prompt: str, context: str) -> str:
@@ -346,20 +365,19 @@ def get_llm_response(prompt: str, context: str) -> str:
     headers = {"Content-Type": "application/json"}
     if is_aml:
         headers["Authorization"] = f"Bearer {LLM_API_KEY}"
+        # If needed to pin a specific deployment on AML:
+        # headers["azureml-model-deployment"] = "<deployment-name>"
     else:
         headers["api-key"] = LLM_API_KEY
 
-    # Default payload (works for many chat flows)
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT_PREFIX + context},
-        {"role": "user", "content": prompt},
-    ]
-    payload = {"messages": messages}
-
-    # If your flow expects named inputs, try one of these instead:
-    # payload = {"inputs": {"prompt": prompt, "context": context}}
-    # payload = {"inputs": {"question": prompt, "history": context}}
-    # payload = {"input_data": {"data": [{"messages": messages}]}}   # AML score.py style
+    # Build Prompt Flow inputs: chat_input + chat_history
+    history_pf = to_pf_chat_history(st.session_state.get(SK_MSGS, []))
+    payload = {
+        "inputs": {
+            "chat_input": prompt,
+            "chat_history": history_pf
+        }
+    }
 
     try:
         resp = requests.post(LLM_ENDPOINT, headers=headers, json=payload, timeout=60)
@@ -372,21 +390,21 @@ def get_llm_response(prompt: str, context: str) -> str:
 
     data = resp.json()
 
-    # ---- Try the common PF/AI Studio locations, in order ----
+    # Parse common Prompt Flow response shapes
     content = (
-        # Prompt Flow most common
-        (data.get("outputs") or {}).get("output")
+        ((data.get("outputs") or {}).get("chat_output"))  # most common
+        or data.get("chat_output")                        # flattened
+        # fallbacks if flow is tweaked later
+        or ((data.get("outputs") or {}).get("output"))
         or data.get("output")
-        # alt keys some flows use
-        or data.get("chat_output")
         or data.get("answer")
-        or data.get("output_text")
-        # OpenAI-style
-        or (data.get("choices", [{}])[0].get("message", {}) or {}).get("content")
+        # OpenAI-style fallback
+        or ((data.get("choices", [{}])[0].get("message", {}) or {}).get("content"))
     )
     if not content:
         content = json.dumps(data, ensure_ascii=False)
     return content
+
 # ==========================
 # ❖ Power BI               |
 # ==========================
@@ -422,16 +440,19 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
     st.markdown('<div class="chat-wrapper">', unsafe_allow_html=True)
     for m in messages:
         role = m.get("role", "assistant")
-        content = m.get("content", "")
-        safe = html.escape(str(content))  # escape to avoid XSS
-        st.markdown(
-            f"""
-            <div class="msg-row {role}">
-                <div class="msg-bubble">{safe}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        content = m.get("content", "") or ""
+
+        # Bubble wrapper
+        st.markdown(f'<div class="msg-row {role}"><div class="msg-bubble">', unsafe_allow_html=True)
+
+        if role == "assistant":
+            # Render as Markdown (safe, HTML disabled), so **bold**, lists, code blocks work
+            st.markdown(str(content))
+        else:
+            # Escape user text to avoid injection
+            st.markdown(html.escape(str(content)), unsafe_allow_html=False)
+
+        st.markdown('</div></div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================
@@ -511,7 +532,6 @@ def chat_ui() -> None:
         )
 
         # 🔎 Sidebar search (on top, above native nav)
-        # selectbox has built-in type-ahead filtering
         selected = st.selectbox(
             "Search or jump to page",
             options=list(PAGES.keys()),
@@ -549,6 +569,7 @@ def chat_ui() -> None:
         if send and prompt and prompt.strip():
             st.session_state[SK_MSGS].append({"role": "user", "content": prompt.strip()})
 
+            # Build a lightweight textual context if you want to keep it (optional)
             recent = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
             context_text = "\n".join(f"{m['role']}: {m['content']}" for m in recent)
 
@@ -577,7 +598,6 @@ def main() -> None:
         st.title(APP_TITLE)
         chat_ui()
         dashboard_section()
-        
 
 if __name__ == "__main__":
     main()
