@@ -343,22 +343,23 @@ def get_llm_response(prompt: str, context: str) -> str:
     is_aml = ".inference.ml.azure.com" in endpoint_lower
     is_ai_studio = ".inference.azureai.io" in endpoint_lower or "ai.azure.com" in endpoint_lower
 
-    # Correct header by endpoint type
     headers = {"Content-Type": "application/json"}
     if is_aml:
         headers["Authorization"] = f"Bearer {LLM_API_KEY}"
     else:
         headers["api-key"] = LLM_API_KEY
 
-    # Prompt Flow chat deployments generally accept OpenAI-style messages
+    # Default payload (works for many chat flows)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT_PREFIX + context},
         {"role": "user", "content": prompt},
     ]
     payload = {"messages": messages}
-    # If your flow expects a different schema, try one of these instead:
-    # payload = {"inputs": {"messages": messages}}         # some AI Studio flows
-    # payload = {"input_data": {"data": [{"messages": messages}]}}  # some AML score.py
+
+    # If your flow expects named inputs, try one of these instead:
+    # payload = {"inputs": {"prompt": prompt, "context": context}}
+    # payload = {"inputs": {"question": prompt, "history": context}}
+    # payload = {"input_data": {"data": [{"messages": messages}]}}   # AML score.py style
 
     try:
         resp = requests.post(LLM_ENDPOINT, headers=headers, json=payload, timeout=60)
@@ -367,27 +368,23 @@ def get_llm_response(prompt: str, context: str) -> str:
 
     if resp.status_code != 200:
         which = "AML" if is_aml else ("AI Studio" if is_ai_studio else "Unknown")
-        raise RuntimeError(
-            f"LLM error {resp.status_code} ({which}): {resp.text}\n"
-            "Hint: if 400/415, your payload shape doesn’t match the flow’s expected input."
-        )
+        raise RuntimeError(f"LLM error {resp.status_code} ({which}): {resp.text}")
 
     data = resp.json()
 
-    # Try the common places Prompt Flow/AI Studio put text
+    # ---- Try the common PF/AI Studio locations, in order ----
     content = (
-        # OpenAI-style
-        (data.get("choices", [{}])[0].get("message", {}) or {}).get("content")
-        # Prompt Flow chat output
+        # Prompt Flow most common
+        (data.get("outputs") or {}).get("output")
+        or data.get("output")
+        # alt keys some flows use
         or data.get("chat_output")
-        # Other common keys
         or data.get("answer")
         or data.get("output_text")
-        or data.get("output")
-        or data.get("reply")
+        # OpenAI-style
+        or (data.get("choices", [{}])[0].get("message", {}) or {}).get("content")
     )
     if not content:
-        # Last resort – show the JSON so you can see the schema
         content = json.dumps(data, ensure_ascii=False)
     return content
 # ==========================
