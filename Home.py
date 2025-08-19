@@ -12,7 +12,6 @@ import bcrypt
 import requests
 import streamlit as st
 import yaml
-import streamlit.components.v1 as components
 
 # Try to use an Image object for the page icon to avoid path-with-space issues
 try:
@@ -24,12 +23,22 @@ except Exception:
 # =======================
 # ❖ Config / Constants  |
 # =======================
-APP_TITLE = "RSM NextGen Home Page"
+APP_TITLE = "RSM NextGen – Home"
 APP_ICON = ".streamlit/rsm logo.png"
 APP_LAYOUT = "wide"
 
 CREDENTIALS_PATH = Path("credentials.yaml")
 LOGO_PATH = Path(".streamlit/rsm logo.png")
+
+# ---- Registered tool pages (label -> path)
+TOOLS: Dict[str, str] = {
+    "VAT Checker": "pages/VAT_Checker.py",
+    "Audit Assistant": "pages/Audit_assistant.py",
+    "Transfer Pricing Tool": "pages/TP_tool.py",
+    "Value Chain Agent": "pages/Value_Chain_Agent.py",
+    "Intake Form": "pages/Intake_Form.py",
+    "Work Overview Dashboard": "pages/Work_Overview_Dashboard.py",
+}
 
 # ---------- LLM Settings ----------
 LLM_API_KEY = os.getenv("AZURE_API_KEY", "")
@@ -42,14 +51,11 @@ SK_MSGS = "messages"
 MAX_CONTEXT_MESSAGES = 12
 SYSTEM_PROMPT_PREFIX = "You are a helpful assistant. Here is chat context:\n"
 
-# Default-signature hints (treat as hints, not hard filters)
 DEFAULT_SIGNATURES = [
     "Steps to Create a Compute Instance Using AzureML SDK v2",
     "TL;DR: To create an Azure Machine Learning compute instance",
     "Use the AzureML SDK v2 to define and create a compute instance",
 ]
-
-# Toggle to disable filtering in production if needed
 DISABLE_DEFAULT_FILTER = False
 
 # ---------- Power BI org-embed URL ----------
@@ -57,18 +63,6 @@ PBI_EMBED_URL = os.getenv(
     "PBI_EMBED_URL",
     "https://app.powerbi.com/reportEmbed?reportId=90e24eba-e8f2-47a5-905c-f6365f006497&autoAuth=true&ctid=8b279c2c-479d-4b14-8903-efe33db3d877"
 )
-
-# ---------- Sidebar search mapping ----------
-PAGES: Dict[str, str] = {
-    "Home": "app.py",
-    "Audit Assistant": "pages/Audit_assistant.py",
-    "TP tool": "pages/TP_tool.py",
-    "VAT Checker": "pages/VAT Checker.py",
-    "Intake Form": "pages/Intake_Form.py",
-    "Value Chain": "pages/Value_Chain_Agent.py",
-    "Work Overview Dashboard": "pages/Work_Overview_Dashboard.py",
-
-}
 
 # =========================
 # ❖ Page / Global Styling |
@@ -86,7 +80,7 @@ st.set_page_config(
     page_title=APP_TITLE,
     page_icon=_icon_obj,
     layout=APP_LAYOUT,
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded",
 )
 
 def inject_css() -> None:
@@ -94,12 +88,12 @@ def inject_css() -> None:
         """
         <style>
             :root {
-                --primary-color: #009CDE;  
+                --primary-color: #009CDE;
                 --background-color: #2a2a2a;
                 --app-bg: #2a2a2a;
                 --secondary-background-color: #888B8D;
                 --text-color: #ffffff;
-                --link-color: #3F9C35;     
+                --link-color: #3F9C35;
                 --border-color: #7c7c7c;
                 --code-bg: #121212;
                 --base-radius: 0.3rem;
@@ -137,20 +131,27 @@ def inject_css() -> None:
                 color: var(--text-color) !important;
             }
 
-            /* === Chat Avatars === */
-            /* Hide the user avatar completely */
+            /* Subtle section titles in sidebar */
+            .sidebar-section-title {
+                font-size: 0.95rem;
+                letter-spacing: .02em;
+                color: #cfd2d6;
+                text-transform: uppercase;
+                margin: .5rem 0 .25rem 0;
+            }
+
+            /* Hide default multipage nav */
+            [data-testid="stSidebarNav"] { display: none !important; }
+
+            /* Chat avatars */
             [data-testid="chat-message-user"] [data-testid="chatAvatarIcon-user"] {
                 display: none !important;
             }
-
-            /* Keep assistant avatar visible */
             [data-testid="chatAvatarIcon-assistant"] {
                 background: transparent !important;
                 border-radius: 50% !important;
                 overflow: hidden !important;
                 margin-top: 2px !important;
-        
-            
             }
         </style>
         """,
@@ -158,7 +159,6 @@ def inject_css() -> None:
     )
 
 def hide_sidebar_completely() -> None:
-    # Hide sidebar + toggle only on the login screen
     st.markdown(
         """
         <style>
@@ -175,15 +175,6 @@ def logo_img_base64() -> Optional[str]:
             return base64.b64encode(LOGO_PATH.read_bytes()).decode("utf-8")
         except Exception:
             return None
-    return None
-
-def avatar_data_url(path: Path) -> Optional[str]:
-    try:
-        if path and path.exists():
-            b64 = base64.b64encode(path.read_bytes()).decode("utf-8")
-            return f"data:image/png;base64,{b64}"
-    except Exception:
-        pass
     return None
 
 def show_logo(center: bool = True) -> None:
@@ -229,10 +220,6 @@ def logout() -> None:
 # ❖ Prompt Flow helpers    |
 # ==========================
 def to_pf_chat_history(msgs: List[Dict[str, str]], max_pairs: int = 6) -> List[Dict]:
-    """
-    Convert st.session_state[SK_MSGS] to Prompt Flow's chat_history schema:
-    [{inputs:{chat_input:...}, outputs:{chat_output:...}}, ...]
-    """
     pairs = []
     cur_user = None
     for m in msgs:
@@ -258,9 +245,6 @@ def looks_like_default(text: str) -> bool:
     return False
 
 def parse_pf_response(data: dict) -> Optional[str]:
-    """
-    Extract chat text from common Prompt Flow / AI Studio responses.
-    """
     out = (data.get("outputs") or {}).get("chat_output")
     if out:
         return out
@@ -301,7 +285,6 @@ def get_llm_response(prompt: str, context: str) -> str:
     ]
 
     payload_attempts: List[Tuple[str, dict]] = []
-
     if is_aml:
         payload_attempts.extend([
             ("aml.input_data.inputs",         {"input_data": {"inputs": inputs_block}}),
@@ -319,7 +302,7 @@ def get_llm_response(prompt: str, context: str) -> str:
     last_status = None
     last_text = None
 
-    for label, payload in payload_attempts:
+    for _, payload in payload_attempts:
         try:
             resp = requests.post(LLM_ENDPOINT, headers=headers, json=payload, timeout=60)
             last_status = resp.status_code
@@ -343,7 +326,6 @@ def get_llm_response(prompt: str, context: str) -> str:
                 continue
 
             if looks_like_default(content):
-                # log and try next payload
                 continue
 
             return content
@@ -380,7 +362,6 @@ def render_pbi_iframe_pretty(src_url: str, title: str = "Power BI Dashboard") ->
     url = _with_hidden_panes(src_url)
     st.markdown(f"### {title}")
     st.caption("Users must be signed into Power BI to see the dashboard.")
-    # Responsive aspect-ratio container
     st.markdown(
         f"""
         <div style="position:relative;padding-top:56.25%;width:100%;max-width:1600px;margin:0 auto;">
@@ -400,20 +381,14 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
         content = (m.get("content", "") or "").strip()
         chat_role = "user" if role == "user" else "assistant"
 
-        # Theme colors
         bubble_color = "#009CDE" if chat_role == "assistant" else "#3F9C35"
-        # Align user to the right, assistant to the left
-        justify = "flex-start" if chat_role == "user" else "flex-start"
-
         safe = html.escape(content)
-
-        # Use Streamlit's chat container (for default avatars), but draw our own bubble inside it.
         with st.chat_message(chat_role):
             st.markdown(
                 f"""
                 <div style="
                     display:flex;
-                    justify-content:{justify};
+                    justify-content:flex-start;
                     width:100%;
                 ">
                   <div style="
@@ -439,7 +414,6 @@ def login_ui() -> None:
     hide_sidebar_completely()
     show_logo(center=True)
 
-    # Simple throttling to discourage brute-force attempts
     st.session_state.setdefault("login_fail_count", 0)
     st.session_state.setdefault("login_lock_until", 0)
 
@@ -494,61 +468,70 @@ credentials:
         else:
             st.session_state["login_fail_count"] += 1
             if st.session_state["login_fail_count"] >= 5:
-                st.session_state["login_lock_until"] = time.time() + 300  # lock 5 minutes
+                st.session_state["login_lock_until"] = time.time() + 300  # 5 minutes
             st.error("Invalid username or password.")
 
 # ==========================
 # ❖ UI: Chat               |
 # ==========================
 def chat_ui() -> None:
+    # ---- SIDEBAR
     with st.sidebar:
-        show_logo(center=False)
+        show_logo(center=True)
+
+        # ========== SECTION 1: Navigation ==========
+        st.markdown("---")
+
+        # Flat page links (prefer page_link; fallback to buttons)
+        try:
+            st.page_link("Home.py", label="Home", icon="🏠")
+            st.page_link("pages/Application.py", label="Applications", icon="🧰")
+        except Exception:
+            st.button("Home", use_container_width=True)
+            if st.button("Applications", use_container_width=True):
+                st.switch_page("pages/Application.py")
+
+        st.markdown("#### Search tools")
+        selected_tool = st.selectbox(
+            "Search or jump to a tool",
+            options=list(TOOLS.keys()),
+            index=None,
+            placeholder="Search tools…",
+            label_visibility="collapsed",
+            key="__tool_search_sidebar__",
+        )
+        if selected_tool:
+            st.switch_page(TOOLS[selected_tool])
+
+        st.markdown("---")
+
+        # ========== SECTION 2: Session ==========
         st.markdown(
-            f'<div style="font-size:0.925rem;color:#e5e7eb;margin-bottom:0.5rem;">Signed in as <b>{st.session_state.get(SK_USER)}</b></div>',
+            f'<div style="font-size:0.9rem;color:#e5e7eb;margin-bottom:0.5rem;">Signed in as <b>{st.session_state.get(SK_USER, "user")}</b></div>',
             unsafe_allow_html=True,
         )
+        if st.button("Log out", type="secondary", use_container_width=True):
+            logout()
 
-        # If your Streamlit version doesn't support index=None, switch to the compatibility version in the comment below.
-        selected = st.selectbox(
-            "Search or jump to page",
-            options=list(PAGES.keys()),
-            index=None,
-            placeholder="Search pages…",
-            label_visibility="collapsed",
-            key="__nav_search__",
-        )
-        # # Compatibility version:
-        # options = [""] + list(PAGES.keys())
-        # selected = st.selectbox(
-        #     "Search or jump to page",
-        #     options=options,
-        #     index=0,
-        #     label_visibility="collapsed",
-        #     key="__nav_search__",
-        #     format_func=lambda x: "Search pages…" if x == "" else x,
-        # )
-        if selected:
-            try:
-                st.switch_page(PAGES[selected])
-            except Exception:
-                st.page_link(PAGES[selected], label=f"Open “{selected}” →")
-
-        st.button("Log out", type="secondary", on_click=logout)
         st.markdown("---")
-        st.caption("Session")
-        if st.button("Clear conversation"):
+
+        # ========== SECTION 3: Conversation ==========
+        if st.button("Clear conversation", use_container_width=True):
             st.session_state[SK_MSGS] = [{"role": "assistant", "content": "Hi! How can I help today?"}]
             st.rerun()
 
-    st.markdown('<div class="chat-card">', unsafe_allow_html=True)
+    # ---- MAIN CONTENT (single instance)
+    st.title(APP_TITLE)
+
     with st.expander("💬 Chat", expanded=True):
-        st.title("RSM Brain")
+        st.header("RSM Brain")
         st.session_state.setdefault(SK_MSGS, [])
         render_chat_history(st.session_state[SK_MSGS])
 
         with st.form("chat_form", clear_on_submit=True):
             prompt = st.text_area("Type your message…", height=80, label_visibility="collapsed", key="chat_prompt")
             send = st.form_submit_button("Send")
+
         if send and prompt and prompt.strip():
             st.session_state[SK_MSGS].append({"role": "user", "content": prompt.strip()})
             recent = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
@@ -562,7 +545,6 @@ def chat_ui() -> None:
             if len(st.session_state[SK_MSGS]) > MAX_CONTEXT_MESSAGES:
                 st.session_state[SK_MSGS] = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
             st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================
 # ❖ App Entry              |
@@ -572,8 +554,7 @@ def main() -> None:
     if not st.session_state.get(SK_AUTH):
         login_ui()
     else:
-        st.title(APP_TITLE)
         chat_ui()
-        
+
 if __name__ == "__main__":
     main()
