@@ -3,6 +3,7 @@ import os
 import json
 import base64
 import html
+import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
@@ -11,6 +12,7 @@ import requests
 import streamlit as st
 import yaml
 import streamlit.components.v1 as components
+import html as _html  # alias for safe escaping in our renderer
 
 # =======================
 # ❖ Config / Constants  |
@@ -78,7 +80,7 @@ def inject_css() -> None:
                 --link-color: #3F9C35;
                 --border-color: #7c7c7c;
                 --code-bg: #121212;
-                --base-radius: 0.3rem;
+                --base-radius: 16px;
                 --button-radius: 9999px;
             }
             html, body, .stApp, [class*="css"] {
@@ -94,7 +96,7 @@ def inject_css() -> None:
                 background-color: var(--code-bg) !important;
                 color: var(--text-color) !important;
                 border: 1px solid var(--border-color) !important;
-                border-radius: var(--base-radius) !important;
+                border-radius: 8px !important;
             }
             .stButton>button {
                 background: var(--primary-color) !important;
@@ -110,21 +112,27 @@ def inject_css() -> None:
                 color: var(--text-color) !important;
             }
 
-            .chat-wrapper { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
+            /* Chat layout */
+            .chat-wrapper { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.75rem; }
             .msg-row { display: flex; width: 100%; }
             .msg-row.assistant { justify-content: flex-start; }
             .msg-row.user      { justify-content: flex-end; }
             .msg-bubble {
+                display: inline-block;
                 max-width: min(80ch, 78%);
                 padding: 0.9rem 1rem;
                 color: #fff;
                 line-height: 1.45;
                 border-radius: 16px;
                 box-shadow: 0 12px 28px rgba(0,0,0,0.35);
-                word-wrap: break-word; white-space: pre-wrap; font-weight: 400;
+                word-wrap: break-word; white-space: normal; font-weight: 400;
             }
             .assistant .msg-bubble { background: var(--primary-color); border-top-left-radius: 6px; }
             .user .msg-bubble      { background: var(--link-color);    border-top-right-radius: 6px; }
+
+            /* Make code blocks look nice inside bubbles */
+            .msg-bubble pre { margin: 0.5rem 0 0 0; padding: 0.75rem; background: #0b1220; border-radius: 12px; overflow-x: auto; }
+            .msg-bubble code { background: rgba(255,255,255,0.08); padding: 0 0.25rem; border-radius: 6px; }
 
             [data-testid="collapsedControl"] { display: none; }
 
@@ -229,24 +237,49 @@ def looks_like_default(text: str) -> bool:
 
 def parse_pf_response(data: dict) -> Optional[str]:
     """
-    Extract chat text from common Prompt Flow / AI md_Studio responses.
+    Extract chat text from common Prompt Flow / AI Studio responses.
     """
-    # Prompt Flow shapes
     out = (data.get("outputs") or {}).get("chat_output")
     if out:
         return out
     out = data.get("chat_output")
     if out:
         return out
-    # Some flows use "output"
     out = (data.get("outputs") or {}).get("output") or data.get("output")
     if out:
         return out
-    # OpenAI-style fallback
     try:
         return (data.get("choices", [{}])[0].get("message", {}) or {}).get("content")
     except Exception:
         return None
+
+# ---- Minimal Markdown -> HTML for assistant bubble (safe-ish) ----
+def _md_to_html_light(text: str) -> str:
+    """
+    Supports: fenced code blocks ``` ```, inline `code`, **bold**, *italics*, line breaks.
+    No raw HTML passthrough.
+    """
+    if not text:
+        return ""
+    s = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    code_blocks = []
+    def _take_block(m):
+        code = m.group(1)
+        code_blocks.append(_html.escape(code))
+        return f"[[[CODEBLOCK_{len(code_blocks)-1}]]]"
+
+    s = re.sub(r"```([\s\S]*?)```", _take_block, s)
+    s = _html.escape(s)
+    s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)            # inline code
+    s = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", s)  # bold
+    s = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"<em>\1</em>", s) # italic
+    s = s.replace("\n", "<br>")
+
+    for i, code_html in enumerate(code_blocks):
+        s = s.replace(f"[[[CODEBLOCK_{i}]]]", f"<pre><code>{code_html}</code></pre>")
+
+    return s
 
 # ==========================
 # ❖ LLM Call               |
@@ -267,7 +300,6 @@ def get_llm_response(prompt: str, context: str) -> str:
 
     history_pf = to_pf_chat_history(st.session_state.get(SK_MSGS, []))
 
-    # ---- Try the most likely payload shapes IN ORDER ----
     inputs_block = {"chat_input": prompt, "chat_history": history_pf}
     messages_ooai = [
         {"role": "system", "content": SYSTEM_PROMPT_PREFIX + context},
@@ -275,9 +307,7 @@ def get_llm_response(prompt: str, context: str) -> str:
     ]
 
     payload_attempts: List[Tuple[str, dict]] = []
-
     if is_aml:
-        # AML often needs input_data wrapping
         payload_attempts.extend([
             ("aml.input_data.inputs",         {"input_data": {"inputs": inputs_block}}),
             ("aml.input_data.flat",           {"input_data": inputs_block}),
@@ -285,7 +315,6 @@ def get_llm_response(prompt: str, context: str) -> str:
             ("aml.openai_messages_in_input",  {"input_data": {"inputs": {"messages": messages_ooai}}}),
         ])
     else:
-        # AI Studio typically uses "inputs"
         payload_attempts.extend([
             ("ai.inputs",                     {"inputs": inputs_block}),
             ("ai.inputs.messages",            {"inputs": {"messages": messages_ooai}}),
@@ -303,11 +332,9 @@ def get_llm_response(prompt: str, context: str) -> str:
             if resp.status_code != 200:
                 continue
 
-            # Parse JSON (fall back to raw text if not JSON)
             try:
                 data = resp.json()
             except Exception:
-                # Some endpoints return plain text; if it doesn't look like default, accept it.
                 if last_text and not looks_like_default(last_text):
                     return last_text
                 else:
@@ -315,28 +342,23 @@ def get_llm_response(prompt: str, context: str) -> str:
 
             content = parse_pf_response(data)
             if not content:
-                # If no content field, try dumping the data
                 candidate = json.dumps(data, ensure_ascii=False)
                 if candidate and not looks_like_default(candidate):
                     return candidate
                 continue
 
-            # Reject default response; try next payload
             if looks_like_default(content):
                 continue
 
-            # Success
             return content
 
         except requests.RequestException as e:
             last_text = f"Network error calling LLM: {e}"
             continue
 
-    # If we got here, none of the shapes produced a non-default answer
     details = f"Last status: {last_status}; Last body: {last_text}"
     raise RuntimeError(
         "Endpoint accepted the call but appears to ignore inputs (still returns the flow's default). "
-        "This usually means the managed online endpoint expects a different request schema. "
         "Tried multiple payload shapes without success.\n\n" + details
     )
 
@@ -371,61 +393,21 @@ def render_pbi_iframe_pretty(src_url: str, title: str = "Power BI Dashboard") ->
 # ==========================
 # ❖ UI Helpers             |
 # ==========================
-def _md_to_html_light(text: str) -> str:
-    """
-    Minimal, safe-ish Markdown to HTML for chat bubbles.
-    Supports: fenced code blocks ``` ```, inline `code`, **bold**, *italics*, line breaks.
-    No raw HTML passthrough.
-    """
-    if not text:
-        return ""
-
-    # Normalize line endings
-    s = text.replace("\r\n", "\n").replace("\r", "\n")
-
-    # Extract fenced code blocks first and replace with placeholders
-    code_blocks = []
-    def _take_block(m):
-        code = m.group(1)
-        code_blocks.append(_html.escape(code))
-        return f"[[[CODEBLOCK_{len(code_blocks)-1}]]]"
-
-    s = re.sub(r"```([\s\S]*?)```", _take_block, s)
-
-    # Escape everything else
-    s = _html.escape(s)
-
-    # Inline code
-    s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
-
-    # Bold (**text**)
-    s = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", s)
-
-    # Italic (*text*)
-    s = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"<em>\1</em>", s)
-
-    # Line breaks
-    s = s.replace("\n", "<br>")
-
-    # Put back fenced code blocks as <pre><code>
-    for i, code_html in enumerate(code_blocks):
-        s = s.replace(f"[[[CODEBLOCK_{i}]]]",
-                      f"<pre><code>{code_html}</code></pre>")
-
-    return s
-
 def render_chat_history(messages: List[Dict[str, str]]) -> None:
+    """
+    Render both user and assistant messages INSIDE their bubbles.
+    Assistant text uses a light Markdown->HTML converter to keep formatting
+    while staying inside the same HTML block (avoids Streamlit's extra wrappers).
+    """
     st.markdown('<div class="chat-wrapper">', unsafe_allow_html=True)
     for m in messages:
         role = m.get("role", "assistant")
         content = (m.get("content") or "").strip()
         bubble_class = "assistant" if role == "assistant" else "user"
 
-        # Prepare HTML content INSIDE the bubble
         if role == "assistant":
             inner_html = _md_to_html_light(content)
         else:
-            # Escape user text, keep simple line breaks
             inner_html = _html.escape(content).replace("\n", "<br>")
 
         st.markdown(
@@ -439,6 +421,7 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
             unsafe_allow_html=True,
         )
     st.markdown("</div>", unsafe_allow_html=True)
+
 # ==========================
 # ❖ UI: Login              |
 # ==========================
