@@ -376,18 +376,16 @@ def render_pbi_iframe_pretty(src_url: str, title: str = "Power BI Dashboard") ->
 # ❖ UI Helpers             |
 # ==========================
 def _tidy_llm_text(text: str) -> str:
-    """Normalize spacing, bullets, and common headings."""
-    t = (text or "").strip()
-    t = t.replace("\r\n", "\n")
+    """Normalize spacing, bullets, and common headings into Markdown (not HTML)."""
+    t = (text or "").strip().replace("\r\n", "\n")
     # Collapse 3+ newlines to 2
     t = re.sub(r"\n{3,}", "\n\n", t)
     # Strip trailing spaces on each line
     t = "\n".join(line.rstrip() for line in t.split("\n"))
-    # Convert **TL;DR:** to a heading
+    # Convert **TL;DR:** to a markdown heading
     t = re.sub(r"^\s*\*\*TL;DR:\*\*\s*", "### TL;DR\n\n", t, flags=re.IGNORECASE | re.MULTILINE)
     # Normalize bullet markers to "- "
     t = re.sub(r"^\s*[•–*]\s+", "- ", t, flags=re.MULTILINE)
-
     # Tighten lists: remove blank lines between consecutive list items
     lines, out, prev_is_li = t.split("\n"), [], False
     for ln in lines:
@@ -398,48 +396,23 @@ def _tidy_llm_text(text: str) -> str:
         prev_is_li = is_li
     return "\n".join(out)
 
-def _markdown_to_html(md_text: str) -> str:
-    """Best-effort Markdown → HTML. Uses 'markdown' lib if available, else a light fallback."""
+def _markdown_to_html_or_text(md_text: str) -> str:
+    """
+    If 'markdown' lib exists, return HTML.
+    Otherwise, return SAFE plain text with <br> line breaks and no HTML tags.
+    """
     try:
         import markdown as md  # type: ignore
+        # Render to HTML (Streamlit will display it since we pass unsafe_allow_html=True)
         return md.markdown(md_text, extensions=["sane_lists", "extra", "nl2br"])
     except Exception:
-        # Fallback: support ### headings, **bold**, and - list items
-        txt = md_text
-
-        # Headings (### ...)
-        def h3(m): return f"<h3>{html.escape(m.group(1).strip())}</h3>"
-        txt = re.sub(r"^\s*###\s+(.+)$", h3, txt, flags=re.MULTILINE)
-
-        # Bold **text**
-        def bold(m): return f"<strong>{html.escape(m.group(1))}</strong>"
-        txt = re.sub(r"\*\*(.+?)\*\*", bold, txt)
-
-        # Build simple HTML with <ul>/<li> and <p>
-        out, in_ul = [], False
-        for ln in txt.split("\n"):
-            m = re.match(r"^\s*-\s+(.+)", ln)
-            if m:
-                if not in_ul:
-                    out.append("<ul>")
-                    in_ul = True
-                out.append(f"<li>{html.escape(m.group(1))}</li>")
-            else:
-                if in_ul:
-                    out.append("</ul>")
-                    in_ul = False
-                if ln.strip():
-                    out.append(f"<p>{html.escape(ln)}</p>")
-                else:
-                    out.append("")  # preserve blank lines
-        if in_ul:
-            out.append("</ul>")
-        return "\n".join(out)
+        # SAFE fallback: no HTML tags — just escaped text with <br> line breaks.
+        return html.escape(md_text).replace("\n", "<br>")
 
 def format_llm_reply_to_html(raw_text: str) -> str:
-    """Pipeline: tidy text then render to HTML."""
-    tidy = _tidy_llm_text(raw_text)
-    return _markdown_to_html(tidy)
+    """Pipeline: tidy to Markdown, then to HTML if possible (else safe text)."""
+    tidy_md = _tidy_llm_text(raw_text)
+    return _markdown_to_html_or_text(tidy_md)
 
 def render_chat_history(messages: List[Dict[str, str]]) -> None:
     for m in messages:
