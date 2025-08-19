@@ -376,43 +376,109 @@ def render_pbi_iframe_pretty(src_url: str, title: str = "Power BI Dashboard") ->
 # ❖ UI Helpers             |
 # ==========================
 def _tidy_llm_text(text: str) -> str:
-    """Normalize spacing, bullets, and common headings into Markdown (not HTML)."""
+    """Normalize spacing, bullets, and a few headings (still Markdown)."""
     t = (text or "").strip().replace("\r\n", "\n")
     # Collapse 3+ newlines to 2
     t = re.sub(r"\n{3,}", "\n\n", t)
-    # Strip trailing spaces on each line
+    # Strip trailing spaces per line
     t = "\n".join(line.rstrip() for line in t.split("\n"))
-    # Convert **TL;DR:** to a markdown heading
-    t = re.sub(r"^\s*\*\*TL;DR:\*\*\s*", "### TL;DR\n\n", t, flags=re.IGNORECASE | re.MULTILINE)
-    # Normalize bullet markers to "- "
+    # Convert common **TL;DR:** into a markdown heading
+    t = re.sub(r"^\s*\*\*TL;DR:\*\*\s*$", "### TL;DR", t, flags=re.IGNORECASE | re.MULTILINE)
+    # Normalize bullets: •, –, * → -
     t = re.sub(r"^\s*[•–*]\s+", "- ", t, flags=re.MULTILINE)
-    # Tighten lists: remove blank lines between consecutive list items
-    lines, out, prev_is_li = t.split("\n"), [], False
-    for ln in lines:
-        is_li = bool(re.match(r"^\s*-\s+", ln))
-        if is_li and prev_is_li and out and out[-1] == "":
-            out.pop()
-        out.append(ln)
-        prev_is_li = is_li
+    return t
+
+def _md_to_html_basic(md: str) -> str:
+    """
+    Lightweight Markdown -> HTML (no external deps).
+    Supports:
+      - headings (#, ##, ###)
+      - **bold**, *italic*
+      - horizontal rules (---)
+      - unordered lists (- item)
+      - ordered lists (1. item)
+      - paragraphs / blank lines
+    """
+    md = _tidy_llm_text(md)
+    lines = md.split("\n")
+    out = []
+    in_ul = False
+    in_ol = False
+
+    def close_lists():
+        nonlocal in_ul, in_ol
+        if in_ul:
+            out.append("</ul>")
+            in_ul = False
+        if in_ol:
+            out.append("</ol>")
+            in_ol = False
+
+    def fmt_inline(s: str) -> str:
+        s = html.escape(s)
+        # bold (**text**)
+        s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
+        # italic (*text*)
+        s = re.sub(r"(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)", r"<em>\1</em>", s)
+        return s
+
+    for raw in lines:
+        ln = raw.rstrip()
+
+        # Horizontal rule
+        if re.match(r"^\s*---+\s*$", ln):
+            close_lists()
+            out.append("<hr/>")
+            continue
+
+        # Headings
+        m = re.match(r"^\s*(#{1,6})\s+(.+?)\s*$", ln)
+        if m:
+            close_lists()
+            level = len(m.group(1))
+            out.append(f"<h{level}>{fmt_inline(m.group(2))}</h{level}>")
+            continue
+
+        # Ordered list item: "1. text"
+        m = re.match(r"^\s*\d+\.\s+(.+)$", ln)
+        if m:
+            if in_ul:
+                out.append("</ul>")
+                in_ul = False
+            if not in_ol:
+                out.append("<ol>")
+                in_ol = True
+            out.append(f"<li>{fmt_inline(m.group(1))}</li>")
+            continue
+
+        # Unordered list item: "- text"
+        m = re.match(r"^\s*-\s+(.+)$", ln)
+        if m:
+            if in_ol:
+                out.append("</ol>")
+                in_ol = False
+            if not in_ul:
+                out.append("<ul>")
+                in_ul = True
+            out.append(f"<li>{fmt_inline(m.group(1))}</li>")
+            continue
+
+        # Blank line => paragraph break
+        if not ln.strip():
+            close_lists()
+            out.append("")  # preserve spacing
+            continue
+
+        # Paragraph text
+        close_lists()
+        out.append(f"<p>{fmt_inline(ln)}</p>")
+
+    close_lists()
     return "\n".join(out)
 
-def _markdown_to_html_or_text(md_text: str) -> str:
-    """
-    If 'markdown' lib exists, return HTML.
-    Otherwise, return SAFE plain text with <br> line breaks and no HTML tags.
-    """
-    try:
-        import markdown as md  # type: ignore
-        # Render to HTML (Streamlit will display it since we pass unsafe_allow_html=True)
-        return md.markdown(md_text, extensions=["sane_lists", "extra", "nl2br"])
-    except Exception:
-        # SAFE fallback: no HTML tags — just escaped text with <br> line breaks.
-        return html.escape(md_text).replace("\n", "<br>")
-
 def format_llm_reply_to_html(raw_text: str) -> str:
-    """Pipeline: tidy to Markdown, then to HTML if possible (else safe text)."""
-    tidy_md = _tidy_llm_text(raw_text)
-    return _markdown_to_html_or_text(tidy_md)
+    """Public helper: convert LLM markdown-ish text to safe, readable HTML."""
+    return _md_to_html_basic(raw_text)
 
 def render_chat_history(messages: List[Dict[str, str]]) -> None:
     for m in messages:
@@ -420,13 +486,13 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
         content = (m.get("content", "") or "").strip()
         chat_role = "user" if role == "user" else "assistant"
 
+        # Colors
         bubble_color = "#009CDE" if chat_role == "assistant" else "#3F9C35"
 
+        # Assistant: format to HTML (headers, lists, etc). User: plain, escaped text.
         if chat_role == "assistant":
-            # Format LLM markdown to HTML for nicer rendering
             inner_html = format_llm_reply_to_html(content)
         else:
-            # User: escape everything, keep as plain text (with line breaks)
             inner_html = html.escape(content).replace("\n", "<br>")
 
         with st.chat_message(chat_role):
@@ -444,7 +510,7 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
                       padding:0.9rem 1rem;
                       box-shadow:0 12px 28px rgba(0,0,0,0.35);
                       max-width:min(80ch, 78%);
-                      line-height:1.45;
+                      line-height:1.5;
                       word-wrap:break-word;
                       white-space:normal;
                   ">{inner_html}</div>
@@ -452,6 +518,7 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
                 """,
                 unsafe_allow_html=True,
             )
+
 # ==========================
 # ❖ UI: Login              |
 # ==========================
