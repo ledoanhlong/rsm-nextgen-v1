@@ -378,63 +378,46 @@ def render_pbi_iframe_pretty(src_url: str, title: str = "Power BI Dashboard") ->
 def _tidy_llm_text(text: str) -> str:
     """Normalize spacing, bullets, and common headings."""
     t = (text or "").strip()
-
+    t = t.replace("\r\n", "\n")
     # Collapse 3+ newlines to 2
     t = re.sub(r"\n{3,}", "\n\n", t)
-
-    # Normalize Windows newlines, strip trailing spaces
-    t = t.replace("\r\n", "\n")
+    # Strip trailing spaces on each line
     t = "\n".join(line.rstrip() for line in t.split("\n"))
-
-    # Convert common bold-headings like **TL;DR:** to markdown headings
+    # Convert **TL;DR:** to a heading
     t = re.sub(r"^\s*\*\*TL;DR:\*\*\s*", "### TL;DR\n\n", t, flags=re.IGNORECASE | re.MULTILINE)
+    # Normalize bullet markers to "- "
+    t = re.sub(r"^\s*[•–*]\s+", "- ", t, flags=re.MULTILINE)
 
-    # Ensure list markers are consistent (dash + space)
-    t = re.sub(r"^\s*•\s+", "- ", t, flags=re.MULTILINE)
-    t = re.sub(r"^\s*–\s+", "- ", t, flags=re.MULTILINE)
-    t = re.sub(r"^\s*\*\s+", "- ", t, flags=re.MULTILINE)
-
-    # Tighten lists: remove empty lines between list items
-    lines = t.split("\n")
-    out = []
-    prev_was_li = False
+    # Tighten lists: remove blank lines between consecutive list items
+    lines, out, prev_is_li = t.split("\n"), [], False
     for ln in lines:
         is_li = bool(re.match(r"^\s*-\s+", ln))
-        if is_li and prev_was_li and out and out[-1] == "":
-            out.pop()  # drop blank line between bullets
+        if is_li and prev_is_li and out and out[-1] == "":
+            out.pop()
         out.append(ln)
-        prev_was_li = is_li
-    t = "\n".join(out)
-
-    return t
+        prev_is_li = is_li
+    return "\n".join(out)
 
 def _markdown_to_html(md_text: str) -> str:
     """Best-effort Markdown → HTML. Uses 'markdown' lib if available, else a light fallback."""
     try:
-        import markdown  # type: ignore
-        # Use sane lists and extra if available
-        return markdown.markdown(md_text, extensions=["sane_lists", "extra"])
+        import markdown as md  # type: ignore
+        return md.markdown(md_text, extensions=["sane_lists", "extra", "nl2br"])
     except Exception:
-        # Very small fallback: bold, headings (###/##/#), and dash lists
-        html = md_text
-
-        # Escape HTML first to avoid injection; we'll re-insert <br>, <strong>, <ul>/<li>, <h3>
-        esc = html
-        esc = html_escape(esc := html) if False else html  # no-op placeholder, we’ll escape per-part below
+        # Fallback: support ### headings, **bold**, and - list items
+        txt = md_text
 
         # Headings (### ...)
         def h3(m): return f"<h3>{html.escape(m.group(1).strip())}</h3>"
-        esc = re.sub(r"^\s*###\s+(.+)$", h3, esc, flags=re.MULTILINE)
+        txt = re.sub(r"^\s*###\s+(.+)$", h3, txt, flags=re.MULTILINE)
 
         # Bold **text**
         def bold(m): return f"<strong>{html.escape(m.group(1))}</strong>"
-        esc = re.sub(r"\*\*(.+?)\*\*", bold, esc)
+        txt = re.sub(r"\*\*(.+?)\*\*", bold, txt)
 
-        # Lists: wrap consecutive - items into <ul><li>..</li></ul>
-        lines = esc.split("\n")
-        out = []
-        in_ul = False
-        for ln in lines:
+        # Build simple HTML with <ul>/<li> and <p>
+        out, in_ul = [], False
+        for ln in txt.split("\n"):
             m = re.match(r"^\s*-\s+(.+)", ln)
             if m:
                 if not in_ul:
@@ -448,17 +431,15 @@ def _markdown_to_html(md_text: str) -> str:
                 if ln.strip():
                     out.append(f"<p>{html.escape(ln)}</p>")
                 else:
-                    out.append("")
+                    out.append("")  # preserve blank lines
         if in_ul:
             out.append("</ul>")
-        # Preserve blank lines
         return "\n".join(out)
 
 def format_llm_reply_to_html(raw_text: str) -> str:
     """Pipeline: tidy text then render to HTML."""
     tidy = _tidy_llm_text(raw_text)
-    html_out = _markdown_to_html(tidy)
-    return html_out
+    return _markdown_to_html(tidy)
 
 def render_chat_history(messages: List[Dict[str, str]]) -> None:
     for m in messages:
