@@ -4,8 +4,6 @@ import streamlit as st
 
 def render():
     st.set_page_config(page_title="RSM VAT AID ", layout="wide")
-    st.title("ICS Idea Intake Form")
-
     # --- Form URL (provided)
     FORM_URL = "https://rsmnl.diamondforms.net/Internal_Idea_Input"
 

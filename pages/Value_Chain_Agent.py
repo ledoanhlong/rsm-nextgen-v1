@@ -119,7 +119,7 @@ with st.sidebar:
     show_logo(center=True)
 
     # Section 1: Navigation
-    st.markdown('<div class="sidebar-section-title">Navigation</div>', unsafe_allow_html=True)
+    st.markdown("---")
     try:
         st.page_link("Home.py", label="Home", icon="🏠")
         st.page_link("pages/Application.py", label="Applications", icon="🧰")
@@ -144,7 +144,6 @@ with st.sidebar:
     st.markdown("---")
 
     # Section 2: Session
-    st.markdown('<div class="sidebar-section-title">Session</div>', unsafe_allow_html=True)
     st.markdown(
         f'<div style="font-size:0.9rem;color:#e5e7eb;margin-bottom:0.5rem;">Signed in as <b>{st.session_state.get(SK_USER, "user")}</b></div>',
         unsafe_allow_html=True,
@@ -155,14 +154,6 @@ with st.sidebar:
             if k in st.session_state:
                 del st.session_state[k]
         st.switch_page("Home.py")
-
-    st.markdown("---")
-
-    # Section 3: Conversation
-    st.markdown('<div class="sidebar-section-title">Conversation</div>', unsafe_allow_html=True)
-    if st.button("Clear conversation", use_container_width=True):
-        st.session_state[SK_MSGS] = [{"role": "assistant", "content": "Hi! How can I help today?"}]
-        st.rerun()
 
 # ====== Auth gate ======
 if not st.session_state.get(SK_AUTH):

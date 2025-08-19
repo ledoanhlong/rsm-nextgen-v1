@@ -222,7 +222,6 @@ def render() -> None:
     EMBED_API_KEY  = LLM_API_KEY
 
     # Title + settings
-    st.subheader("RAG Audit Assistant 🌐🔍")
     st.write("Upload your public & client PDFs and the Input GPT.xlsx. Click **Run** to retrieve relevant chunks & generate answers.")
 
     with st.sidebar:

@@ -16,8 +16,6 @@ def render() -> None:
         st.secrets["AZURE_API_ENDPOINT"]
     )
 
-    st.subheader("Transfer Pricing Document Filler")
-
     # File uploader
     uploaded = st.file_uploader(
         "Upload OECD text, transcript.docx, analysis.pdf, variables.xlsx, template.docx:",
