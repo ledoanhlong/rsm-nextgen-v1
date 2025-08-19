@@ -6,11 +6,20 @@ import html
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+import time
+
 import bcrypt
 import requests
 import streamlit as st
 import yaml
 import streamlit.components.v1 as components
+
+# Try to use an Image object for the page icon to avoid path-with-space issues
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except Exception:
+    PIL_AVAILABLE = False
 
 # =======================
 # ❖ Config / Constants  |
@@ -33,12 +42,15 @@ SK_MSGS = "messages"
 MAX_CONTEXT_MESSAGES = 12
 SYSTEM_PROMPT_PREFIX = "You are a helpful assistant. Here is chat context:\n"
 
-# This text (or fragments of it) signals the flow's **default** response
+# Default-signature hints (treat as hints, not hard filters)
 DEFAULT_SIGNATURES = [
     "Steps to Create a Compute Instance Using AzureML SDK v2",
     "TL;DR: To create an Azure Machine Learning compute instance",
     "Use the AzureML SDK v2 to define and create a compute instance",
 ]
+
+# Toggle to disable filtering in production if needed
+DISABLE_DEFAULT_FILTER = False
 
 # ---------- Power BI org-embed URL ----------
 PBI_EMBED_URL = os.getenv(
@@ -54,14 +66,25 @@ PAGES: Dict[str, str] = {
     "VAT Checker": "pages/VAT Checker.py",
     "Intake Form": "pages/Intake_Form.py",
     "Value Chain": "pages/Value_Chain_Agent.py",
+    "Work Overview Dashboard": "pages/Work_Overview_Dashboard.py",
+
 }
 
 # =========================
 # ❖ Page / Global Styling |
 # =========================
+# Safer page icon handling (PIL image object if available)
+if PIL_AVAILABLE and Path(APP_ICON).exists():
+    try:
+        _icon_obj = Image.open(APP_ICON)
+    except Exception:
+        _icon_obj = APP_ICON
+else:
+    _icon_obj = APP_ICON
+
 st.set_page_config(
     page_title=APP_TITLE,
-    page_icon=APP_ICON,
+    page_icon=_icon_obj,
     layout=APP_LAYOUT,
     initial_sidebar_state="collapsed"
 )
@@ -71,21 +94,24 @@ def inject_css() -> None:
         """
         <style>
             :root {
-                --primary-color: #009CDE;
+                --primary-color: #009CDE;  
                 --background-color: #2a2a2a;
+                --app-bg: #2a2a2a;
                 --secondary-background-color: #888B8D;
                 --text-color: #ffffff;
-                --link-color: #3F9C35;
+                --link-color: #3F9C35;     
                 --border-color: #7c7c7c;
                 --code-bg: #121212;
                 --base-radius: 0.3rem;
                 --button-radius: 9999px;
             }
+
             html, body, .stApp, [class*="css"] {
                 background: var(--background-color) !important;
                 color: var(--text-color) !important;
                 font-family: 'Prelo', -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;
             }
+
             a { color: var(--link-color) !important; }
             pre, code, kbd, samp { background: var(--code-bg) !important; color: var(--text-color) !important; }
             .block-container { max-width: 100%; padding-top: 1.25rem; }
@@ -96,6 +122,7 @@ def inject_css() -> None:
                 border: 1px solid var(--border-color) !important;
                 border-radius: var(--base-radius) !important;
             }
+
             .stButton>button {
                 background: var(--primary-color) !important;
                 color: #fff !important;
@@ -110,36 +137,28 @@ def inject_css() -> None:
                 color: var(--text-color) !important;
             }
 
-            .chat-wrapper { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
-            .msg-row { display: flex; width: 100%; }
-            .msg-row.assistant { justify-content: flex-start; }
-            .msg-row.user      { justify-content: flex-end; }
-            .msg-bubble {
-                max-width: min(80ch, 78%);
-                padding: 0.9rem 1rem;
-                color: #fff;
-                line-height: 1.45;
-                border-radius: 16px;
-                box-shadow: 0 12px 28px rgba(0,0,0,0.35);
-                word-wrap: break-word; white-space: pre-wrap; font-weight: 400;
+            /* === Chat Avatars === */
+            /* Hide the user avatar completely */
+            [data-testid="chat-message-user"] [data-testid="chatAvatarIcon-user"] {
+                display: none !important;
             }
-            .assistant .msg-bubble { background: var(--primary-color); border-top-left-radius: 6px; }
-            .user .msg-bubble      { background: var(--link-color);    border-top-right-radius: 6px; }
 
-            [data-testid="collapsedControl"] { display: none; }
-
-            .login-shell { width: 100%; display: flex; justify-content: center; }
-            .login-shell [data-testid="stForm"] {
-                width: 360px !important; max-width: 90vw; margin: 0 auto !important;
+            /* Keep assistant avatar visible */
+            [data-testid="chatAvatarIcon-assistant"] {
+                background: transparent !important;
+                border-radius: 50% !important;
+                overflow: hidden !important;
+                margin-top: 2px !important;
+        
+            
             }
-            .login-shell [data-testid="stForm"] .stTextInput > div > div > input { width: 100%; }
-            .login-shell [data-testid="stForm"] .stButton > button { width: 100%; display: block; margin-top: .5rem; }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
 def hide_sidebar_completely() -> None:
+    # Hide sidebar + toggle only on the login screen
     st.markdown(
         """
         <style>
@@ -156,6 +175,15 @@ def logo_img_base64() -> Optional[str]:
             return base64.b64encode(LOGO_PATH.read_bytes()).decode("utf-8")
         except Exception:
             return None
+    return None
+
+def avatar_data_url(path: Path) -> Optional[str]:
+    try:
+        if path and path.exists():
+            b64 = base64.b64encode(path.read_bytes()).decode("utf-8")
+            return f"data:image/png;base64,{b64}"
+    except Exception:
+        pass
     return None
 
 def show_logo(center: bool = True) -> None:
@@ -221,6 +249,8 @@ def to_pf_chat_history(msgs: List[Dict[str, str]], max_pairs: int = 6) -> List[D
     return pairs[-max_pairs:]
 
 def looks_like_default(text: str) -> bool:
+    if DISABLE_DEFAULT_FILTER:
+        return False
     t = (text or "").strip()
     for sig in DEFAULT_SIGNATURES:
         if sig.lower() in t.lower():
@@ -231,18 +261,15 @@ def parse_pf_response(data: dict) -> Optional[str]:
     """
     Extract chat text from common Prompt Flow / AI Studio responses.
     """
-    # Prompt Flow shapes
     out = (data.get("outputs") or {}).get("chat_output")
     if out:
         return out
     out = data.get("chat_output")
     if out:
         return out
-    # Some flows use "output"
     out = (data.get("outputs") or {}).get("output") or data.get("output")
     if out:
         return out
-    # OpenAI-style fallback
     try:
         return (data.get("choices", [{}])[0].get("message", {}) or {}).get("content")
     except Exception:
@@ -267,7 +294,6 @@ def get_llm_response(prompt: str, context: str) -> str:
 
     history_pf = to_pf_chat_history(st.session_state.get(SK_MSGS, []))
 
-    # ---- Try the most likely payload shapes IN ORDER ----
     inputs_block = {"chat_input": prompt, "chat_history": history_pf}
     messages_ooai = [
         {"role": "system", "content": SYSTEM_PROMPT_PREFIX + context},
@@ -277,7 +303,6 @@ def get_llm_response(prompt: str, context: str) -> str:
     payload_attempts: List[Tuple[str, dict]] = []
 
     if is_aml:
-        # AML often needs input_data wrapping
         payload_attempts.extend([
             ("aml.input_data.inputs",         {"input_data": {"inputs": inputs_block}}),
             ("aml.input_data.flat",           {"input_data": inputs_block}),
@@ -285,7 +310,6 @@ def get_llm_response(prompt: str, context: str) -> str:
             ("aml.openai_messages_in_input",  {"input_data": {"inputs": {"messages": messages_ooai}}}),
         ])
     else:
-        # AI Studio typically uses "inputs"
         payload_attempts.extend([
             ("ai.inputs",                     {"inputs": inputs_block}),
             ("ai.inputs.messages",            {"inputs": {"messages": messages_ooai}}),
@@ -303,11 +327,9 @@ def get_llm_response(prompt: str, context: str) -> str:
             if resp.status_code != 200:
                 continue
 
-            # Parse JSON (fall back to raw text if not JSON)
             try:
                 data = resp.json()
             except Exception:
-                # Some endpoints return plain text; if it doesn't look like default, accept it.
                 if last_text and not looks_like_default(last_text):
                     return last_text
                 else:
@@ -315,24 +337,21 @@ def get_llm_response(prompt: str, context: str) -> str:
 
             content = parse_pf_response(data)
             if not content:
-                # If no content field, try dumping the data
                 candidate = json.dumps(data, ensure_ascii=False)
                 if candidate and not looks_like_default(candidate):
                     return candidate
                 continue
 
-            # Reject default response; try next payload
             if looks_like_default(content):
+                # log and try next payload
                 continue
 
-            # Success
             return content
 
         except requests.RequestException as e:
             last_text = f"Network error calling LLM: {e}"
             continue
 
-    # If we got here, none of the shapes produced a non-default answer
     details = f"Last status: {last_status}; Last body: {last_text}"
     raise RuntimeError(
         "Endpoint accepted the call but appears to ignore inputs (still returns the flow's default). "
@@ -361,28 +380,57 @@ def render_pbi_iframe_pretty(src_url: str, title: str = "Power BI Dashboard") ->
     url = _with_hidden_panes(src_url)
     st.markdown(f"### {title}")
     st.caption("Users must be signed into Power BI to see the dashboard.")
+    # Responsive aspect-ratio container
     st.markdown(
-        '<div style="width:100%; overflow-x:auto; display:flex; justify-content:center;">',
+        f"""
+        <div style="position:relative;padding-top:56.25%;width:100%;max-width:1600px;margin:0 auto;">
+          <iframe src="{html.escape(url)}" frameborder="0" allowfullscreen
+                  style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
-    components.iframe(url, width=1450, height=750, scrolling=True)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================
 # ❖ UI Helpers             |
 # ==========================
 def render_chat_history(messages: List[Dict[str, str]]) -> None:
-    st.markdown('<div class="chat-wrapper">', unsafe_allow_html=True)
     for m in messages:
         role = m.get("role", "assistant")
-        content = m.get("content", "") or ""
-        st.markdown(f'<div class="msg-row {role}"><div class="msg-bubble">', unsafe_allow_html=True)
-        if role == "assistant":
-            st.markdown(str(content))  # Markdown render
-        else:
-            st.markdown(html.escape(str(content)), unsafe_allow_html=False)
-        st.markdown('</div></div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+        content = (m.get("content", "") or "").strip()
+        chat_role = "user" if role == "user" else "assistant"
+
+        # Theme colors
+        bubble_color = "#009CDE" if chat_role == "assistant" else "#3F9C35"
+        # Align user to the right, assistant to the left
+        justify = "flex-start" if chat_role == "user" else "flex-start"
+
+        safe = html.escape(content)
+
+        # Use Streamlit's chat container (for default avatars), but draw our own bubble inside it.
+        with st.chat_message(chat_role):
+            st.markdown(
+                f"""
+                <div style="
+                    display:flex;
+                    justify-content:{justify};
+                    width:100%;
+                ">
+                  <div style="
+                      background:{bubble_color};
+                      color:#fff;
+                      border-radius:16px;
+                      padding:0.9rem 1rem;
+                      box-shadow:0 12px 28px rgba(0,0,0,0.35);
+                      max-width:min(80ch, 78%);
+                      line-height:1.45;
+                      word-wrap:break-word;
+                      white-space:pre-wrap;
+                  ">{safe}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 # ==========================
 # ❖ UI: Login              |
@@ -390,6 +438,17 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
 def login_ui() -> None:
     hide_sidebar_completely()
     show_logo(center=True)
+
+    # Simple throttling to discourage brute-force attempts
+    st.session_state.setdefault("login_fail_count", 0)
+    st.session_state.setdefault("login_lock_until", 0)
+
+    now = time.time()
+    if st.session_state["login_lock_until"] > now:
+        wait = int(st.session_state["login_lock_until"] - now)
+        st.error(f"Too many failed attempts. Try again in {wait}s.")
+        return
+
     st.markdown('<div class="login-card">', unsafe_allow_html=True)
     st.markdown(
         """
@@ -409,10 +468,12 @@ credentials:
   users:
     YourUser:
       name: "Your Name"
+      # bcrypt hash of your password (use a utility to generate)
       password: "$2b$12$examplehashreplacewithreal"
 """,
                 language="yaml",
             )
+
     st.markdown('<div class="login-shell">', unsafe_allow_html=True)
     with st.form("login_form", clear_on_submit=False):
         username = st.text_input("Username", key="login_username")
@@ -427,23 +488,14 @@ credentials:
             st.session_state[SK_AUTH] = True
             st.session_state[SK_USER] = username
             st.session_state.setdefault(SK_MSGS, [{"role": "assistant", "content": "Hi! How can I help today?"}])
+            st.session_state["login_fail_count"] = 0
             st.success("Login successful. Loading chat…")
             st.rerun()
         else:
+            st.session_state["login_fail_count"] += 1
+            if st.session_state["login_fail_count"] >= 5:
+                st.session_state["login_lock_until"] = time.time() + 300  # lock 5 minutes
             st.error("Invalid username or password.")
-
-# ==========================
-# ❖ UI: Dashboard Section  |
-# ==========================
-def dashboard_section() -> None:
-    st.markdown('<div class="pbi-expander">', unsafe_allow_html=True)
-    with st.expander("📊 Work Overview Dashboard", expanded=False):
-        try:
-            render_pbi_iframe_pretty(PBI_EMBED_URL, title="Business Strategy Consulting Work Overview")
-        except Exception as e:
-            st.error(f"Embed error: {e}")
-            st.info("Ensure the URL is correct and your tenant allows iFrame embedding (and you're signed in).")
-    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================
 # ❖ UI: Chat               |
@@ -455,6 +507,8 @@ def chat_ui() -> None:
             f'<div style="font-size:0.925rem;color:#e5e7eb;margin-bottom:0.5rem;">Signed in as <b>{st.session_state.get(SK_USER)}</b></div>',
             unsafe_allow_html=True,
         )
+
+        # If your Streamlit version doesn't support index=None, switch to the compatibility version in the comment below.
         selected = st.selectbox(
             "Search or jump to page",
             options=list(PAGES.keys()),
@@ -463,11 +517,22 @@ def chat_ui() -> None:
             label_visibility="collapsed",
             key="__nav_search__",
         )
+        # # Compatibility version:
+        # options = [""] + list(PAGES.keys())
+        # selected = st.selectbox(
+        #     "Search or jump to page",
+        #     options=options,
+        #     index=0,
+        #     label_visibility="collapsed",
+        #     key="__nav_search__",
+        #     format_func=lambda x: "Search pages…" if x == "" else x,
+        # )
         if selected:
             try:
                 st.switch_page(PAGES[selected])
             except Exception:
                 st.page_link(PAGES[selected], label=f"Open “{selected}” →")
+
         st.button("Log out", type="secondary", on_click=logout)
         st.markdown("---")
         st.caption("Session")
@@ -478,7 +543,6 @@ def chat_ui() -> None:
     st.markdown('<div class="chat-card">', unsafe_allow_html=True)
     with st.expander("💬 Chat", expanded=True):
         st.title("RSM Brain")
-        st.caption("Your question will appear on the right and the Assistant will answer on the left.")
         st.session_state.setdefault(SK_MSGS, [])
         render_chat_history(st.session_state[SK_MSGS])
 
@@ -510,7 +574,6 @@ def main() -> None:
     else:
         st.title(APP_TITLE)
         chat_ui()
-        dashboard_section()
-
+        
 if __name__ == "__main__":
     main()
