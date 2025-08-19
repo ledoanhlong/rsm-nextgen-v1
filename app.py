@@ -229,7 +229,7 @@ def looks_like_default(text: str) -> bool:
 
 def parse_pf_response(data: dict) -> Optional[str]:
     """
-    Extract chat text from common Prompt Flow / AI Studio responses.
+    Extract chat text from common Prompt Flow / AI md_Studio responses.
     """
     # Prompt Flow shapes
     out = (data.get("outputs") or {}).get("chat_output")
@@ -371,28 +371,73 @@ def render_pbi_iframe_pretty(src_url: str, title: str = "Power BI Dashboard") ->
 # ==========================
 # ❖ UI Helpers             |
 # ==========================
+def _md_to_html_light(text: str) -> str:
+    """
+    Minimal, safe-ish Markdown to HTML for chat bubbles.
+    Supports: fenced code blocks ``` ```, inline `code`, **bold**, *italics*, line breaks.
+    No raw HTML passthrough.
+    """
+    if not text:
+        return ""
+
+    # Normalize line endings
+    s = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # Extract fenced code blocks first and replace with placeholders
+    code_blocks = []
+    def _take_block(m):
+        code = m.group(1)
+        code_blocks.append(_html.escape(code))
+        return f"[[[CODEBLOCK_{len(code_blocks)-1}]]]"
+
+    s = re.sub(r"```([\s\S]*?)```", _take_block, s)
+
+    # Escape everything else
+    s = _html.escape(s)
+
+    # Inline code
+    s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+
+    # Bold (**text**)
+    s = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", s)
+
+    # Italic (*text*)
+    s = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"<em>\1</em>", s)
+
+    # Line breaks
+    s = s.replace("\n", "<br>")
+
+    # Put back fenced code blocks as <pre><code>
+    for i, code_html in enumerate(code_blocks):
+        s = s.replace(f"[[[CODEBLOCK_{i}]]]",
+                      f"<pre><code>{code_html}</code></pre>")
+
+    return s
+
 def render_chat_history(messages: List[Dict[str, str]]) -> None:
     st.markdown('<div class="chat-wrapper">', unsafe_allow_html=True)
     for m in messages:
         role = m.get("role", "assistant")
-        content = (m.get("content", "") or "").strip()
+        content = (m.get("content") or "").strip()
         bubble_class = "assistant" if role == "assistant" else "user"
 
-        # Wrap the message text inside the bubble
+        # Prepare HTML content INSIDE the bubble
+        if role == "assistant":
+            inner_html = _md_to_html_light(content)
+        else:
+            # Escape user text, keep simple line breaks
+            inner_html = _html.escape(content).replace("\n", "<br>")
+
         st.markdown(
             f"""
             <div class="msg-row {bubble_class}">
               <div class="msg-bubble">
-                {content if role == "user" else ""}
+                {inner_html}
+              </div>
+            </div>
             """,
             unsafe_allow_html=True,
         )
-
-        if role == "assistant":
-            # Render assistant text as Markdown inside the bubble
-            st.markdown(content, unsafe_allow_html=False)
-
-        st.markdown("</div></div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 # ==========================
 # ❖ UI: Login              |
