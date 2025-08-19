@@ -14,8 +14,6 @@ cet = pytz.timezone("Europe/Paris")  # CET/CEST timestamps
 
 def render() -> None:
     """Render the VAT checker as a self-contained widget (no login, no credits)."""
-    st.subheader("EU VAT Batch Checker (VIES)")
-
     # Input: upload OR text area
     uploaded = st.file_uploader("Upload a CSV/XLSX with VAT codes", type=["csv", "xlsx"])
     vat_list: List[str] = []

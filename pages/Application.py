@@ -22,7 +22,7 @@ TOOLS: Dict[str, str] = {
     "Transfer Pricing Tool": "pages/TP_tool.py",
     "Value Chain Agent": "pages/Value_Chain_Agent.py",
     "Intake Form": "pages/Intake_Form.py",
-    "Work Overview Dashboard": "pages/Work_Overview_Dashboard.py",
+    "Work Overview Dashboard": "pages/Work Overview Dashboard.py",
 }
 
 # ====== Page config ======
