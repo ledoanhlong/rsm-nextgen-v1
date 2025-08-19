@@ -375,15 +375,25 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
     st.markdown('<div class="chat-wrapper">', unsafe_allow_html=True)
     for m in messages:
         role = m.get("role", "assistant")
-        content = m.get("content", "") or ""
-        st.markdown(f'<div class="msg-row {role}"><div class="msg-bubble">', unsafe_allow_html=True)
-        if role == "assistant":
-            st.markdown(str(content))  # Markdown render
-        else:
-            st.markdown(html.escape(str(content)), unsafe_allow_html=False)
-        st.markdown('</div></div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+        content = (m.get("content", "") or "").strip()
+        bubble_class = "assistant" if role == "assistant" else "user"
 
+        # Wrap the message text inside the bubble
+        st.markdown(
+            f"""
+            <div class="msg-row {bubble_class}">
+              <div class="msg-bubble">
+                {content if role == "user" else ""}
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if role == "assistant":
+            # Render assistant text as Markdown inside the bubble
+            st.markdown(content, unsafe_allow_html=False)
+
+        st.markdown("</div></div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 # ==========================
 # ❖ UI: Login              |
 # ==========================
