@@ -59,6 +59,10 @@ st.set_page_config(
     initial_sidebar_state="collapsed"  
 )
 
+import streamlit as st
+
+st.set_page_config(page_title="RSM NextGen", layout="wide", initial_sidebar_state="collapsed")
+
 def inject_css() -> None:
     st.markdown(
         """
@@ -335,23 +339,55 @@ def get_llm_response(prompt: str, context: str) -> str:
     if not LLM_API_KEY or not LLM_ENDPOINT:
         raise RuntimeError("Missing LLM configuration. Set AZURE_API_KEY and AZURE_API_ENDPOINT.")
 
-    headers = {"Content-Type": "application/json", "api-key": LLM_API_KEY}
+    # --- Detect endpoint type by domain
+    endpoint_lower = LLM_ENDPOINT.lower()
+    is_aml = ".inference.ml.azure.com" in endpoint_lower  # Azure ML Online Endpoint
+    is_ai_studio = ".inference.azureai.io" in endpoint_lower or "ai.azure.com" in endpoint_lower  # AI Studio/Inference
+
+    # --- Correct auth header per endpoint type
+    if is_aml:
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {LLM_API_KEY}"}
+    else:
+        # Default to AI Studio/Inference style if not AML
+        headers = {"Content-Type": "application/json", "api-key": LLM_API_KEY}
+
+    # --- Payload: keep your OpenAI-style messages by default
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT_PREFIX + context},
         {"role": "user", "content": prompt},
     ]
+
+    # If your AML endpoint expects a custom schema, adjust here.
+    # Many Prompt Flow scoring endpoints accept {"messages": ...}, but if yours doesn't,
+    # try uncommenting one of the shapes below and comment the other:
+    payload = {"messages": messages}
+    # payload = {"input_data": {"data": [{"messages": messages}]}}  # example AML score.py style
+    # payload = {"inputs": {"messages": messages}}                   # example AI Studio flow endpoint
+
     try:
-        resp = requests.post(LLM_ENDPOINT, headers=headers, json={"messages": messages}, timeout=60)
+        resp = requests.post(LLM_ENDPOINT, headers=headers, json=payload, timeout=60)
     except requests.RequestException as e:
         raise RuntimeError(f"Network error calling LLM: {e}")
 
     if resp.status_code != 200:
-        raise RuntimeError(f"LLM error {resp.status_code}: {resp.text}")
+        # Helpful diagnostics
+        which = "AML" if is_aml else ("AI Studio" if is_ai_studio else "Unknown")
+        raise RuntimeError(
+            f"LLM error {resp.status_code} ({which}): {resp.text}\n"
+            f"Hint: If 403 persists on AML, ensure you're using Authorization: Bearer and the correct endpoint key.\n"
+            f"If 400/415, your payload shape may not match the flow's expected schema."
+        )
 
     data = resp.json()
-    content = (data.get("choices", [{}])[0].get("message", {}).get("content"))
+    # Try common locations for content
+    content = (
+        data.get("choices", [{}])[0].get("message", {}).get("content")
+        or data.get("output")
+        or data.get("reply")
+    )
     if not content:
-        content = data.get("output") or data.get("reply") or json.dumps(data)
+        # Last resort: dump JSON
+        content = json.dumps(data)
     return content
 
 # ==========================
