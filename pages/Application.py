@@ -49,7 +49,7 @@ def inject_css() -> None:
             html, body, .stApp, [class*="css"] {
                 background: var(--background-color) !important;
                 color: var(--text-color) !important;
-                font-family: 'Prelo', -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;
+                /*font-family: 'Prelo', -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;*/
             }
 
             a { color: var(--link-color) !important; }
@@ -88,6 +88,13 @@ def inject_css() -> None:
 
             /* Hide default multipage nav */
             [data-testid="stSidebarNav"] { display: none !important; }
+
+            /* Application cards title font size */
+            div[data-testid="stVerticalBlock"] h3 {
+                font-size: 1.2rem !important;
+                font-weight: 600 !important;
+                margin-bottom: 0.25rem !important;
+            }
         </style>
         """,
         unsafe_allow_html=True,
@@ -155,8 +162,6 @@ with st.sidebar:
                 del st.session_state[k]
         st.switch_page("Home.py")
 
-    st.markdown("---")
-
 # ====== Main content (Applications) ======
 st.title(APP_TITLE)
 
@@ -179,11 +184,11 @@ if target and target in TOOLS:
 
 # Cards grid
 st.markdown("### All tools")
-cols = st.columns(3, gap="large")
+cols = st.columns(3, gap="small")
 for i, (label, page_path) in enumerate(TOOLS.items()):
     with cols[i % 3]:
         with st.container(border=True):
             st.subheader(label)
-            st.caption("Open this tool.")
+            st.caption("Please click on the button below to open this tool.")
             if st.button(f"Open {label}", key=f"open_{label}"):
                 st.switch_page(page_path)

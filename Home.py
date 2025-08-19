@@ -92,7 +92,7 @@ def inject_css() -> None:
                 --background-color: #2a2a2a;
                 --app-bg: #2a2a2a;
                 --secondary-background-color: #888B8D;
-                --text-color: #ffffff;
+                --text-color:#ffffff;
                 --link-color: #3F9C35;
                 --border-color: #7c7c7c;
                 --code-bg: #121212;
@@ -103,7 +103,7 @@ def inject_css() -> None:
             html, body, .stApp, [class*="css"] {
                 background: var(--background-color) !important;
                 color: var(--text-color) !important;
-                font-family: 'Prelo', -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;
+                /*font-family: 'Prelo', -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;*/
             }
 
             a { color: var(--link-color) !important; }

@@ -51,7 +51,7 @@ def inject_css() -> None:
             html, body, .stApp, [class*="css"] {
                 background: var(--background-color) !important;
                 color: var(--text-color) !important;
-                font-family: 'Prelo', -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;
+                /*font-family: 'Prelo', -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;*/
             }
             a { color: var(--link-color) !important; }
             pre, code, kbd, samp { background: var(--code-bg) !important; color: var(--text-color) !important; }
