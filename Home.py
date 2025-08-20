@@ -25,7 +25,6 @@ except Exception:
 # =======================
 APP_TITLE = "RSM NextGen – Home"
 APP_ICON = ".streamlit/rsm logo.png"
-APP_LAYOUT = "wide"
 
 CREDENTIALS_PATH = Path("credentials.yaml")
 LOGO_PATH = Path(".streamlit/rsm logo.png")
@@ -33,7 +32,7 @@ LOGO_PATH = Path(".streamlit/rsm logo.png")
 # ---- Registered tool pages (label -> path)
 TOOLS: Dict[str, str] = {
     "VAT Checker": "pages/VAT_Checker.py",
-    "Audit Assistant": "pages/Audit_assistant.py",  # <-- this page
+    "Audit Assistant": "pages/Audit_assistant.py",  
     "Transfer Pricing Tool": "pages/TP_tool.py",
     "Value Chain Agent": "pages/Value_Chain_Agent.py",
     "Intake Form": "pages/Intake_Form.py",
@@ -79,7 +78,6 @@ else:
 st.set_page_config(
     page_title=APP_TITLE,
     page_icon=_icon_obj,
-    layout=APP_LAYOUT,
     initial_sidebar_state="expanded",
 )
 
@@ -107,16 +105,6 @@ def inject_css() -> None:
 
             a { color: var(--link-color) !important; }
             pre, code, kbd, samp { background: var(--code-bg) !important; color: var(--text-color) !important; }
-            .block-container { max-width: 100%; padding-top: 1.25rem; }
-
-            /* REMOVE or comment out the following block to reset input styles:
-            textarea, input, select, .stTextInput input, .stTextArea textarea {
-                background-color: var(--code-bg) !important;
-                color: var(--text-color) !important;
-                border: 1px solid var(--border-color) !important;
-                border-radius: var(--base-radius) !important;
-            }
-            */
 
             .stButton>button {
                 background: var(--primary-color) !important;
@@ -150,6 +138,18 @@ def inject_css() -> None:
                 border-radius: 50% !important;
                 overflow: hidden !important;
                 margin-top: 2px !important;
+            }
+
+            .chat-margin-container {
+                margin-left: 100px !important;
+                margin-right: 100px !important;
+            }
+
+            @media (max-width: 900px) {
+                .chat-margin-container {
+                    margin-left: 10px !important;
+                    margin-right: 10px !important;
+                }
             }
         </style>
         """,
@@ -337,37 +337,6 @@ def get_llm_response(prompt: str, context: str) -> str:
         "Endpoint accepted the call but appears to ignore inputs (still returns the flow's default). "
         "This usually means the managed online endpoint expects a different request schema. "
         "Tried multiple payload shapes without success.\n\n" + details
-    )
-
-# ==========================
-# ❖ Power BI               |
-# ==========================
-def _with_hidden_panes(url: str) -> str:
-    try:
-        parsed = urlparse(url)
-        q = dict(parse_qsl(parsed.query))
-        q["navContentPaneEnabled"] = "false"
-        q["filterPaneEnabled"]     = "false"
-        q["chromeless"]            = "true"
-        q["pageView"]              = "FitToWidth"
-        q["fullscreen"]            = "true"
-        new_q = urlencode(q, doseq=True)
-        return urlunparse(parsed._replace(query=new_q))
-    except Exception:
-        return url
-
-def render_pbi_iframe_pretty(src_url: str, title: str = "Power BI Dashboard") -> None:
-    url = _with_hidden_panes(src_url)
-    st.markdown(f"### {title}")
-    st.caption("Users must be signed into Power BI to see the dashboard.")
-    st.markdown(
-        f"""
-        <div style="position:relative;padding-top:56.25%;width:100%;max-width:1600px;margin:0 auto;">
-          <iframe src="{html.escape(url)}" frameborder="0" allowfullscreen
-                  style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe>
-        </div>
-        """,
-        unsafe_allow_html=True,
     )
 
 # ==========================
@@ -630,20 +599,22 @@ def chat_ui() -> None:
     # ---- MAIN CONTENT (single instance)
     st.title(APP_TITLE)
     st.markdown("---")
-    st.markdown("", unsafe_allow_html=True)
-    st.markdown("", unsafe_allow_html=True)
-    st.markdown("", unsafe_allow_html=True)
-
     st.header("🧠 RSM Brain")
+
+    # Add a container div with increased left/right margin
+    st.markdown(
+        """
+        <div class="chat-margin-container">
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.session_state.setdefault(SK_MSGS, [])
     render_chat_history(st.session_state[SK_MSGS])
 
-    # Single-line input, submit on Enter
     prompt = st.chat_input(
         "Type your message and press enter",
         key="chat_prompt",
-        # placeholder="Type your message and press Enter...",
-        # label_visibility="collapsed"
     )
 
     if prompt and prompt.strip():
@@ -658,8 +629,9 @@ def chat_ui() -> None:
         st.session_state[SK_MSGS].append({"role": "assistant", "content": reply})
         if len(st.session_state[SK_MSGS]) > MAX_CONTEXT_MESSAGES:
             st.session_state[SK_MSGS] = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
-        #st.session_state["chat_prompt"] = ""  
         st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)  # Close chat-margin-container
 
 # ==========================
 # ❖ App Entry              |
