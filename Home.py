@@ -103,19 +103,20 @@ def inject_css() -> None:
             html, body, .stApp, [class*="css"] {
                 background: var(--background-color) !important;
                 color: var(--text-color) !important;
-                /*font-family: 'Prelo', -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;*/
             }
 
             a { color: var(--link-color) !important; }
             pre, code, kbd, samp { background: var(--code-bg) !important; color: var(--text-color) !important; }
             .block-container { max-width: 100%; padding-top: 1.25rem; }
 
+            /* REMOVE or comment out the following block to reset input styles:
             textarea, input, select, .stTextInput input, .stTextArea textarea {
                 background-color: var(--code-bg) !important;
                 color: var(--text-color) !important;
                 border: 1px solid var(--border-color) !important;
                 border-radius: var(--base-radius) !important;
             }
+            */
 
             .stButton>button {
                 background: var(--primary-color) !important;
@@ -131,7 +132,6 @@ def inject_css() -> None:
                 color: var(--text-color) !important;
             }
 
-            /* Subtle section titles in sidebar */
             .sidebar-section-title {
                 font-size: 0.95rem;
                 letter-spacing: .02em;
@@ -140,10 +140,8 @@ def inject_css() -> None:
                 margin: .5rem 0 .25rem 0;
             }
 
-            /* Hide default multipage nav */
             [data-testid="stSidebarNav"] { display: none !important; }
 
-            /* Chat avatars */
             [data-testid="chat-message-user"] [data-testid="chatAvatarIcon-user"] {
                 display: none !important;
             }
@@ -486,9 +484,6 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
         content = (m.get("content", "") or "").strip()
         chat_role = "user" if role == "user" else "assistant"
 
-        # Colors
-        bubble_color = "#009CDE" if chat_role == "assistant" else "#3F9C35"
-
         # Assistant: format to HTML (headers, lists, etc). User: plain, escaped text.
         if chat_role == "assistant":
             inner_html = format_llm_reply_to_html(content)
@@ -504,12 +499,12 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
                     width:100%;
                 ">
                   <div style="
-                      background:{bubble_color};
+                      /*background:#2a2a2a;*/
                       color:#fff;
-                      border-radius:16px;
-                      padding:0.9rem 1rem;
-                      box-shadow:0 12px 28px rgba(0,0,0,0.35);
-                      max-width:min(80ch, 78%);
+                      border-radius:0;
+                      padding:0;
+                      box-shadow:none;
+                      max-width:100%;
                       line-height:1.5;
                       word-wrap:break-word;
                       white-space:normal;
@@ -634,29 +629,37 @@ def chat_ui() -> None:
 
     # ---- MAIN CONTENT (single instance)
     st.title(APP_TITLE)
+    st.markdown("---")
+    st.markdown("", unsafe_allow_html=True)
+    st.markdown("", unsafe_allow_html=True)
+    st.markdown("", unsafe_allow_html=True)
 
-    with st.expander("💬 Chat", expanded=True):
-        st.header("🧠 RSM Brain")
-        st.session_state.setdefault(SK_MSGS, [])
-        render_chat_history(st.session_state[SK_MSGS])
+    st.header("🧠 RSM Brain")
+    st.session_state.setdefault(SK_MSGS, [])
+    render_chat_history(st.session_state[SK_MSGS])
 
-        with st.form("chat_form", clear_on_submit=True):
-            prompt = st.text_area("Type your message…", height=80, label_visibility="collapsed", key="chat_prompt")
-            send = st.form_submit_button("Send")
+    # Single-line input, submit on Enter
+    prompt = st.chat_input(
+        "Type your message and press enter",
+        key="chat_prompt",
+        # placeholder="Type your message and press Enter...",
+        # label_visibility="collapsed"
+    )
 
-        if send and prompt and prompt.strip():
-            st.session_state[SK_MSGS].append({"role": "user", "content": prompt.strip()})
-            recent = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
-            context_text = "\n".join(f"{m['role']}: {m['content']}" for m in recent)
-            with st.spinner("Thinking…"):
-                try:
-                    reply = get_llm_response(prompt.strip(), context_text)
-                except Exception as e:
-                    reply = f"Sorry, I hit an error calling the model:\n\n```\n{e}\n```"
-            st.session_state[SK_MSGS].append({"role": "assistant", "content": reply})
-            if len(st.session_state[SK_MSGS]) > MAX_CONTEXT_MESSAGES:
-                st.session_state[SK_MSGS] = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
-            st.rerun()
+    if prompt and prompt.strip():
+        st.session_state[SK_MSGS].append({"role": "user", "content": prompt.strip()})
+        recent = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
+        context_text = "\n".join(f"{m['role']}: {m['content']}" for m in recent)
+        with st.spinner("Thinking…"):
+            try:
+                reply = get_llm_response(prompt.strip(), context_text)
+            except Exception as e:
+                reply = f"Sorry, I hit an error calling the model:\n\n```\n{e}\n```"
+        st.session_state[SK_MSGS].append({"role": "assistant", "content": reply})
+        if len(st.session_state[SK_MSGS]) > MAX_CONTEXT_MESSAGES:
+            st.session_state[SK_MSGS] = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
+        #st.session_state["chat_prompt"] = ""  
+        st.rerun()
 
 # ==========================
 # ❖ App Entry              |
