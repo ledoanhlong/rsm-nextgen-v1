@@ -266,7 +266,7 @@ def get_llm_response(prompt: str, context: str) -> str:
 
     endpoint_lower = LLM_ENDPOINT.lower()
     is_aml = ".inference.ml.azure.com" in endpoint_lower
-    is_ai_studio = ".inference.azureai.io" in endpoint_lower or "ai.azure.com" in endpoint_lower
+    is_ai_studio = (".inference.azureai.io" in endpoint_lower) or ("ai.azure.com" in endpoint_lower)
 
     headers = {"Content-Type": "application/json"}
     if is_aml:
@@ -274,70 +274,57 @@ def get_llm_response(prompt: str, context: str) -> str:
     else:
         headers["api-key"] = LLM_API_KEY
 
+    # Build PF-shaped chat history: [{"inputs":{"chat_input":...},"outputs":{"chat_output":...}}, ...]
     history_pf = to_pf_chat_history(st.session_state.get(SK_MSGS, []))
 
-    inputs_block = {"chat_input": prompt, "chat_history": history_pf}
-    messages_ooai = [
-        {"role": "system", "content": SYSTEM_PROMPT_PREFIX + context},
-        {"role": "user", "content": prompt},
-    ]
+    # 🔴 IMPORTANT: Use the exact PF schema your YAML defines
+    body = {
+        "input_data": {
+            "inputs": {
+                "chat_input": prompt,
+                "chat_history": history_pf
+            }
+        }
+    }
 
-    payload_attempts: List[Tuple[str, dict]] = []
-    if is_aml:
-        payload_attempts.extend([
-            ("aml.input_data.inputs",         {"input_data": {"inputs": inputs_block}}),
-            ("aml.input_data.flat",           {"input_data": inputs_block}),
-            ("aml.flat",                      inputs_block),
-            ("aml.openai_messages_in_input",  {"input_data": {"inputs": {"messages": messages_ooai}}}),
-        ])
-    else:
-        payload_attempts.extend([
-            ("ai.inputs",                     {"inputs": inputs_block}),
-            ("ai.inputs.messages",            {"inputs": {"messages": messages_ooai}}),
-            ("ai.flat",                       inputs_block),
-        ])
+    try:
+        resp = requests.post(LLM_ENDPOINT, headers=headers, json=body, timeout=90)
+    except requests.RequestException as e:
+        raise RuntimeError(f"Network error calling LLM endpoint: {e}") from e
 
-    last_status = None
-    last_text = None
+    if resp.status_code != 200:
+        raise RuntimeError(f"Endpoint returned {resp.status_code}: {resp.text[:800]}")
 
-    for _, payload in payload_attempts:
-        try:
-            resp = requests.post(LLM_ENDPOINT, headers=headers, json=payload, timeout=60)
-            last_status = resp.status_code
-            last_text = resp.text
-            if resp.status_code != 200:
-                continue
+    # Parse typical PF response shapes
+    try:
+        data = resp.json()
+    except Exception:
+        txt = resp.text.strip()
+        return txt if txt else "Empty response from endpoint."
 
-            try:
-                data = resp.json()
-            except Exception:
-                if last_text and not looks_like_default(last_text):
-                    return last_text
-                else:
-                    continue
-
-            content = parse_pf_response(data)
-            if not content:
-                candidate = json.dumps(data, ensure_ascii=False)
-                if candidate and not looks_like_default(candidate):
-                    return candidate
-                continue
-
-            if looks_like_default(content):
-                continue
-
-            return content
-
-        except requests.RequestException as e:
-            last_text = f"Network error calling LLM: {e}"
-            continue
-
-    details = f"Last status: {last_status}; Last body: {last_text}"
-    raise RuntimeError(
-        "Endpoint accepted the call but appears to ignore inputs (still returns the flow's default). "
-        "This usually means the managed online endpoint expects a different request schema. "
-        "Tried multiple payload shapes without success.\n\n" + details
+    # Your flow maps: outputs.chat_output -> ${chat_with_context.output}
+    # The service may return:
+    # - {"outputs":{"chat_output":"..."}}
+    # - or {"output":"..."} or {"chat_output":"..."} depending on runtime wrapper
+    # Try multiple paths:
+    content = (
+        (data.get("outputs") or {}).get("chat_output")
+        or data.get("chat_output")
+        or data.get("output")
     )
+
+    if not content:
+        # Fallback to raw JSON to aid debugging (truncated)
+        return json.dumps(data, ensure_ascii=False)[:4000]
+
+    # Avoid surfacing the default sample answer if schema mismatch ever happens again
+    if looks_like_default(content):
+        raise RuntimeError(
+            "The endpoint responded with its default sample output (schema mismatch). "
+            "Your body must include input_data.inputs.chat_input and input_data.inputs.chat_history."
+        )
+
+    return content
 
 # ==========================
 # ❖ UI Helpers             |
