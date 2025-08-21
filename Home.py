@@ -516,35 +516,38 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
             inner_html = format_llm_reply_to_html(content)
             icon_html = (
                 f'<img src="data:image/png;base64,{assistant_icon_b64}" '
-                'alt="Assistant" style="width:32px;height:32px;border-radius:50%;margin-right:12px;">'
+                'alt="Assistant" style="width:32px;height:32px;border-radius:50%;margin-right:12px;display:block;">'
             )
         else:
             inner_html = html.escape(content).replace("\n", "<br>")
             icon_html = (
                 f'<img src="data:image/png;base64,{user_icon_b64}" '
-                'alt="User" style="width:32px;height:32px;border-radius:50%;margin-right:12px;">'
+                'alt="User" style="width:32px;height:32px;border-radius:50%;margin-right:12px;display:block;">'
             )
 
         st.markdown(
             f"""
             <div style="
-                display:flex;
-                align-items:flex-start;
-                width:100%;
+                display: flex;
+                align-items: center;
+                width: 100%;
                 margin-bottom: 1.2em;
             ">
               {icon_html}
               <div style="
                   background: none;
-                  color:#fff;
-                  border-radius:0;
-                  padding:0.75em 1.1em;
-                  box-shadow:none;
-                  max-width:85%;
-                  line-height:1.5;
-                  word-wrap:break-word;
-                  white-space:pre-wrap;
-                  font-size:1.04em;
+                  color: #fff;
+                  border-radius: 0;
+                  padding: 0.2em 1.1em;
+                  box-shadow: none;
+                  max-width: 85%;
+                  line-height: 1.5;
+                  word-wrap: break-word;
+                  white-space: pre-wrap;
+                  font-size: 1.04em;
+                  display: flex;
+                  align-items: center;
+                  min-height: 32px;
               ">{inner_html}</div>
             </div>
             """,
