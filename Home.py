@@ -541,7 +541,7 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
                   padding: 0.2em 1.1em;
                   box-shadow: none;
                   max-width: 85%;
-                  line-height: 1.5;
+                  line-height: 1;
                   word-wrap: break-word;
                   white-space: pre-wrap;
                   font-size: 1.04em;
