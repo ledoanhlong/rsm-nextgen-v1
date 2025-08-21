@@ -37,6 +37,7 @@ TOOLS: Dict[str, str] = {
     "Value Chain Agent": "pages/Value_Chain_Agent.py",
     "Intake Form": "pages/Intake_Form.py",
     "Work Overview Dashboard": "pages/Work Overview Dashboard.py",
+    "Support": "pages/Support.py",
 }
 
 # ---------- LLM Settings ----------
@@ -49,12 +50,6 @@ SK_MSGS = "messages"
 
 MAX_CONTEXT_MESSAGES = 12
 SYSTEM_PROMPT_PREFIX = "You are a helpful assistant. Here is chat context:\n"
-
-DEFAULT_SIGNATURES = [
-    "Steps to Create a Compute Instance Using AzureML SDK v2",
-    "TL;DR: To create an Azure Machine Learning compute instance",
-    "Use the AzureML SDK v2 to define and create a compute instance",
-]
 DISABLE_DEFAULT_FILTER = False
 
 # ---------- Power BI org-embed URL ----------
@@ -232,15 +227,6 @@ def to_pf_chat_history(msgs: List[Dict[str, str]], max_pairs: int = 6) -> List[D
                           "outputs": {"chat_output": text}})
             cur_user = None
     return pairs[-max_pairs:]
-
-def looks_like_default(text: str) -> bool:
-    if DISABLE_DEFAULT_FILTER:
-        return False
-    t = (text or "").strip()
-    for sig in DEFAULT_SIGNATURES:
-        if sig.lower() in t.lower():
-            return True
-    return False
 
 def parse_pf_response(data: dict) -> Optional[str]:
     out = (data.get("outputs") or {}).get("chat_output")
@@ -439,6 +425,10 @@ def _md_to_html_basic(md: str) -> str:
         s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
         # italic (*text*)
         s = re.sub(r"(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)", r"<em>\1</em>", s)
+        # inline code `code`
+        s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+        # links [text](url) – URL escaped but left as href
+        s = re.sub(r"\[([^\]]+)\]\((https?://[^\s)]+)\)", r'<a href="\2" target="_blank" rel="noopener noreferrer">\1</a>', s)
         return s
 
     for raw in lines:
@@ -614,6 +604,7 @@ def chat_ui() -> None:
         try:
             st.page_link("Home.py", label="Home", icon="🏠")
             st.page_link("pages/Application.py", label="Applications", icon="🧰")
+            st.page_link("pages/Support.py", label="Support", icon="🛠️")
         except Exception:
             st.button("Home", use_container_width=True)
             if st.button("Applications", use_container_width=True):

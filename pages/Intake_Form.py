@@ -26,6 +26,8 @@ TOOLS: Dict[str, str] = {
     "Value Chain Agent": "pages/Value_Chain_Agent.py",
     "Intake Form": "pages/Intake_Form.py",
     "Work Overview Dashboard": "pages/Work Overview Dashboard.py",
+    "Support": "pages/Support.py",
+
 }
 
 # ====== Page config ======
@@ -115,6 +117,7 @@ with st.sidebar:
     try:
         st.page_link("Home.py", label="Home", icon="🏠")
         st.page_link("pages/Application.py", label="Applications", icon="🧰")
+        st.page_link("pages/Support.py", label="Support", icon="🛟")
     except Exception:
         if st.button("← Home", use_container_width=True):
             st.switch_page("Home.py")
