@@ -57,7 +57,15 @@ def inject_css() -> None:
                 font-family: 'Prelo', -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;
             }
             a { color: var(--link-color) !important; }
-            .block-container { max-width: 100%; padding-top: 1.25rem; }
+
+            /* Center content and increase side margins */
+            .block-container {
+                max-width: 1100px !important;   /* ← tweak this number as you like (e.g., 1000–1200) */
+                margin-left: auto !important;
+                margin-right: auto !important;
+                padding: 1.25rem 2rem !important; /* top/bottom, left/right padding */
+            }
+
             textarea, input, select, .stTextInput input, .stTextArea textarea {
                 background-color: var(--code-bg) !important;
                 color: var(--text-color) !important;
@@ -71,6 +79,7 @@ def inject_css() -> None:
                 border-radius: var(--button-radius) !important;
             }
             .stButton>button:hover { filter: brightness(1.05); }
+
             section[data-testid="stSidebar"] {
                 background: #121212 !important;
                 border-right: 1px solid #696968 !important;
@@ -168,13 +177,13 @@ with cols[1]:
 
 st.markdown("---")
 
-# ========= Feedback (direct Outlook Web) =========
+# ========= Feedback (direct Outlook Web only) =========
 st.subheader("Send feedback about a tool")
 
 tool = st.selectbox("Which tool?", options=list(TOOLS.keys()), index=None, placeholder="Select a tool…")
 category = st.selectbox("Category", ["Bug", "Feature request", "Usability", "Performance", "Other"])
 severity = st.selectbox("Severity", ["Low", "Medium", "High", "Critical"])
-description = st.text_area("Describe the issue or suggestion *", height=140, placeholder="What happened? What should change?")
+description = st.text_area("Issue summary *", height=140, placeholder="What happened and why it matters.")
 steps = st.text_area("Steps to reproduce (optional)", height=100, placeholder="1) … 2) … 3) …")
 email = st.text_input("Your contact email (optional)")
 
@@ -186,32 +195,50 @@ def build_outlook_web_link(to_addr: str, subject: str, body: str) -> str:
 
 if st.button("Open in Outlook Web", use_container_width=True):
     if not tool or not description.strip():
-        st.warning("Please fill at least Tool and Description.")
+        st.warning("Please fill at least the Tool and Issue summary.")
     else:
         user = st.session_state.get(SK_USER, "anonymous")
         ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+
+        # Consultant-style subject
         subject = f"[Feedback] {tool} – {category} ({severity})"
+
+        # Consultant-style body (concise, scannable)
         body_lines = [
             f"Tool: {tool}",
-            f"Category: {category}",
-            f"Severity: {severity}",
-            f"Rating: {rating}/5",
             f"Submitted by: {user}",
             f"Timestamp (UTC): {ts}",
             "",
-            "Description:",
+            "Summary",
+            "-------",
             description.strip(),
             "",
-            "Steps to reproduce:",
-            (steps.strip() or "(not provided)"),
-            "",
-            f"Contact email: {email or '(not provided)'}",
-            "",
-            "Attachments:",
-            "- Please add any screenshots/files to this email before sending.",
+            "Action List",
+            "------------",
+            (steps.strip() or "N/A"),
+            "", 
+            "Attachments",
+            "-----------",
+            "- Please attach screenshots or logs if available.",
         ]
         body = "\n".join(body_lines)
 
         outlook_url = build_outlook_web_link(SUPPORT_EMAIL, subject, body)
-        st.markdown(f"[👉 Open in Outlook Web]({outlook_url})", unsafe_allow_html=True)
+
+        # Provide the link and try to auto-open (popup blockers may prevent it)
+        st.link_button("Open in Outlook Web", outlook_url, use_container_width=True)
+
+        # Optional: attempt auto-open in a new tab
+        components.html(
+            f"""
+            <script>
+              (function() {{
+                var url = {quote(outlook_url)!r};
+                var win = window.open(url, '_blank');
+              }})();
+            </script>
+            """,
+            height=0,
+        )
+
         st.expander("Preview email body").code(body)
