@@ -76,6 +76,20 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+def get_assistant_icon_b64() -> str:
+    icon_path = Path(".streamlit/robot icon.png")
+    if icon_path.exists():
+        with open(icon_path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+    return ""
+
+def get_user_icon_b64() -> str:
+    icon_path = Path(".streamlit/user icon.png")
+    if icon_path.exists():
+        with open(icon_path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+    return ""
+
 def inject_css() -> None:
     st.markdown(
         """
@@ -125,14 +139,10 @@ def inject_css() -> None:
 
             [data-testid="stSidebarNav"] { display: none !important; }
 
-            [data-testid="chat-message-user"] [data-testid="chatAvatarIcon-user"] {
-                display: none !important;
-            }
+            /* Hide default Streamlit chat avatar icons for both user and assistant */
+            [data-testid="chatAvatarIcon-user"], 
             [data-testid="chatAvatarIcon-assistant"] {
-                background: transparent !important;
-                border-radius: 50% !important;
-                overflow: hidden !important;
-                margin-top: 2px !important;
+                display: none !important;
             }
 
             .chat-margin-container {
@@ -145,6 +155,11 @@ def inject_css() -> None:
                     margin-left: 10px !important;
                     margin-right: 10px !important;
                 }
+            }
+
+            /* Remove box-shadow from all chat bubbles */
+            .chat-margin-container div[style*="box-shadow"] {
+                box-shadow: none !important;
             }
         </style>
         """,
@@ -490,41 +505,51 @@ def format_llm_reply_to_html(raw_text: str) -> str:
     return _md_to_html_basic(raw_text)
 
 def render_chat_history(messages: List[Dict[str, str]]) -> None:
+    assistant_icon_b64 = get_assistant_icon_b64()
+    user_icon_b64 = get_user_icon_b64()
     for m in messages:
         role = m.get("role", "assistant")
         content = (m.get("content", "") or "").strip()
         chat_role = "user" if role == "user" else "assistant"
 
-        # Assistant: format to HTML (headers, lists, etc). User: plain, escaped text.
         if chat_role == "assistant":
             inner_html = format_llm_reply_to_html(content)
+            icon_html = (
+                f'<img src="data:image/png;base64,{assistant_icon_b64}" '
+                'alt="Assistant" style="width:32px;height:32px;border-radius:50%;margin-right:12px;">'
+            )
         else:
             inner_html = html.escape(content).replace("\n", "<br>")
-
-        with st.chat_message(chat_role):
-            st.markdown(
-                f"""
-                <div style="
-                    display:flex;
-                    justify-content:flex-start;
-                    width:100%;
-                ">
-                  <div style="
-                      /*background:#2a2a2a;*/
-                      color:#fff;
-                      border-radius:0;
-                      padding:0;
-                      box-shadow:none;
-                      max-width:100%;
-                      line-height:1.5;
-                      word-wrap:break-word;
-                      white-space:normal;
-                  ">{inner_html}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            icon_html = (
+                f'<img src="data:image/png;base64,{user_icon_b64}" '
+                'alt="User" style="width:32px;height:32px;border-radius:50%;margin-right:12px;">'
             )
 
+        st.markdown(
+            f"""
+            <div style="
+                display:flex;
+                align-items:flex-start;
+                width:100%;
+                margin-bottom: 1.2em;
+            ">
+              {icon_html}
+              <div style="
+                  background: none;
+                  color:#fff;
+                  border-radius:0;
+                  padding:0.75em 1.1em;
+                  box-shadow:none;
+                  max-width:85%;
+                  line-height:1.5;
+                  word-wrap:break-word;
+                  white-space:pre-wrap;
+                  font-size:1.04em;
+              ">{inner_html}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 # ==========================
 # ❖ UI: Login              |
 # ==========================
@@ -579,7 +604,7 @@ credentials:
         elif verify_user(users, username, password):
             st.session_state[SK_AUTH] = True
             st.session_state[SK_USER] = username
-            st.session_state.setdefault(SK_MSGS, [{"role": "assistant", "content": "Hi! How can I help today?"}])
+            st.session_state.setdefault(SK_MSGS, [{"role": "assistant", "content": "Hi! I am an AI model trained on RSM Data How can I help today?"}])
             st.session_state["login_fail_count"] = 0
             st.success("Login successful. Loading chat…")
             st.rerun()
@@ -636,13 +661,13 @@ def chat_ui() -> None:
 
         # ========== SECTION 3: Conversation ==========
         if st.button("Clear conversation", use_container_width=True):
-            st.session_state[SK_MSGS] = [{"role": "assistant", "content": "Hi! How can I help today?"}]
+            st.session_state[SK_MSGS] = [{"role": "assistant", "content": "Hi! I am an AI model trained on RSM Data How can I help today?"}]
             st.rerun()
 
     # ---- MAIN CONTENT (single instance)
     st.title(APP_TITLE)
     st.markdown("---")
-    st.header("🧠 RSM Brain")
+    st.header("📖 RSM Brain")
 
     # Add a container div with increased left/right margin
     st.markdown(
@@ -674,7 +699,7 @@ def chat_ui() -> None:
             st.session_state[SK_MSGS] = st.session_state[SK_MSGS][-MAX_CONTEXT_MESSAGES:]
         st.rerun()
 
-    st.markdown('</div>', unsafe_allow_html=True)  # Close chat-margin-container
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================
 # ❖ App Entry              |
