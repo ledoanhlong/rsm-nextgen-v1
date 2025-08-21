@@ -545,9 +545,9 @@ def render_chat_history(messages: List[Dict[str, str]]) -> None:
                   word-wrap: break-word;
                   white-space: pre-wrap;
                   font-size: 1.04em;
-                  display: flex;
-                  align-items: center;
                   min-height: 32px;
+                  text-align: left;
+                  display: block;
               ">{inner_html}</div>
             </div>
             """,
