@@ -24,7 +24,7 @@ except Exception:
 # ❖ Config / Constants  |
 # =======================
 APP_TITLE = "RSM NextGen – Home"
-APP_ICON = ".streamlit/rsm logo.png"
+APP_ICON = ".streamlit/rsm logo with blue background.png"
 
 CREDENTIALS_PATH = Path("credentials.yaml")
 LOGO_PATH = Path(".streamlit/rsm logo.png")
